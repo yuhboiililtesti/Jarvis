@@ -82,6 +82,7 @@ async def test_memory_export_has_provenance(kernel):
 def test_api_health_and_tools(kernel, register_test_tools):
     fastapi_testclient = pytest.importorskip("fastapi.testclient")
     from jarvis.api import create_app
+    from jarvis.api.auth import read_token
     app = create_app(kernel)
     with fastapi_testclient.TestClient(app) as client:
         h = client.get("/api/health")
@@ -90,7 +91,10 @@ def test_api_health_and_tools(kernel, register_test_tools):
         t = client.get("/api/tools")
         assert t.status_code == 200
         assert t.json()["count"] >= 1
-        s = client.get("/api/settings")
+        # Settings is an authority-governing route: it requires the token even
+        # on loopback.
+        token = read_token(kernel.config.data_path)
+        s = client.get("/api/settings", headers={"X-Jarvis-Token": token})
         assert s.status_code == 200
         assert "persona" in s.json()
 
@@ -98,9 +102,13 @@ def test_api_health_and_tools(kernel, register_test_tools):
 def test_api_settings_rejects_unknown_key(kernel, register_test_tools):
     fastapi_testclient = pytest.importorskip("fastapi.testclient")
     from jarvis.api import create_app
+    from jarvis.api.auth import read_token
     app = create_app(kernel)
     with fastapi_testclient.TestClient(app) as client:
-        r = client.post("/api/settings", json={"nonsense.key": 1, "policy.mode": "readonly"})
+        token = read_token(kernel.config.data_path)
+        r = client.post("/api/settings",
+                        json={"nonsense.key": 1, "policy.mode": "readonly"},
+                        headers={"X-Jarvis-Token": token})
         body = r.json()
         assert body["applied"] == {"policy.mode": "readonly"}
         assert "nonsense.key" in body["rejected"]
@@ -110,9 +118,12 @@ def test_api_settings_rejects_unknown_key(kernel, register_test_tools):
 def test_api_defcon_endpoint(kernel):
     fastapi_testclient = pytest.importorskip("fastapi.testclient")
     from jarvis.api import create_app
+    from jarvis.api.auth import read_token
     app = create_app(kernel)
     with fastapi_testclient.TestClient(app) as client:
-        r = client.post("/api/defcon", json={"level": 3})
+        token = read_token(kernel.config.data_path)
+        r = client.post("/api/defcon", json={"level": 3},
+                        headers={"X-Jarvis-Token": token})
         assert r.status_code == 200
         assert r.json()["defcon"] == 3
         assert r.json()["effective_mode"] == "ask"

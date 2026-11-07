@@ -61,6 +61,28 @@ class ApprovalRequired(Exception):
         self.tool = tool
 
 
+def _grant_target(args_json: str | None) -> str | None:
+    """Recover the target of a remembered approval from its stored args.
+
+    A remembered approval must be scoped to the *specific* action, not the tool
+    name alone: "may write C:\\safe\\x" must not widen into "may write anything".
+    ``args_json`` is the redacted args recorded when the approval was requested;
+    targets (paths, urls, node ids) are not secret and survive redaction.
+    """
+    if not args_json:
+        return None
+    try:
+        args = json.loads(args_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(args, dict):
+        return None
+    for key in ("path", "target", "url", "node", "host", "name", "command", "app"):
+        if key in args and args[key]:
+            return str(args[key])
+    return None
+
+
 class TaskController:
     def __init__(self, db: Any, bus: Any, registry: Any, policy: Any,
                  verifier: Any, config: Any) -> None:
@@ -177,10 +199,11 @@ class TaskController:
             (decision, by, now_iso(), aid),
         )
         if decision == "allow" and remember_session:
-            self.policy.add_session_grant(row["tool"], target=None,
+            self.policy.add_session_grant(row["tool"], target=_grant_target(row["args"]),
                                           note=f"from approval {aid}")
         elif decision == "allow" and remember_for_s:
-            self.policy.add_grant(row["tool"], target=None, ttl_s=remember_for_s,
+            self.policy.add_grant(row["tool"], target=_grant_target(row["args"]),
+                                  ttl_s=remember_for_s,
                                   note=f"from approval {aid}")
         fut = self._pending_approvals.get(aid)
         if fut and not fut.done():
@@ -208,27 +231,32 @@ class TaskController:
             return ToolResult(ok=False, error="task cancelled",
                               certainty="unknown"), {"verified": False}
 
-        # Preflight: a tool may refuse an impossible action *before* we ask the
-        # owner for approval. It must not act; it only validates.
-        pre_ctx = ToolContext(
-            config=self.config, db=self.db, bus=self.bus, tool_name=tool_name,
-            user=t.user, services=dict(self.services), secrets=self._secret_lookup,
-        )
-        try:
-            pre = (tool.preflight(pre_ctx, **args)
-                   if callable(getattr(tool, "preflight", None)) else None)
-        except Exception as exc:  # a broken preflight must not block the tool
-            log.warning("preflight for %s raised: %s", tool_name, exc)
-            pre = None
-        if isinstance(pre, ToolResult) and not pre.ok:
-            self.db.audit("tool.preflight_refused", target=tool_name,
-                          detail={"error": pre.error, "task_id": t.id}, severity="warn")
-            return pre, {"verified": False, "method": "preflight"}
-
         side = tool.spec.side_effect
+        # Policy is evaluated *before* any plugin code runs (preflight included):
+        # a tool that policy denies never executes untrusted plugin logic.
         decision = self.policy.decide(tool_name, side, args)
 
-        if not decision.allow and decision.needs_approval:
+        # Preflight: a tool may refuse an impossible action *before* we ask the
+        # owner for approval. It must not act; it only validates. It runs only
+        # after policy has tentatively authorised the tool (allow or needs-
+        # approval), never for a policy-denied tool.
+        if decision.allow or decision.needs_approval:
+            pre_ctx = ToolContext(
+                config=self.config, db=self.db, bus=self.bus, tool_name=tool_name,
+                user=t.user, services=dict(self.services), secrets=self._secret_lookup,
+            )
+            try:
+                pre = (tool.preflight(pre_ctx, **args)
+                       if callable(getattr(tool, "preflight", None)) else None)
+            except Exception as exc:  # a broken preflight must not block the tool
+                log.warning("preflight for %s raised: %s", tool_name, exc)
+                pre = None
+            if isinstance(pre, ToolResult) and not pre.ok:
+                self.db.audit("tool.preflight_refused", target=tool_name,
+                              detail={"error": pre.error, "task_id": t.id}, severity="warn")
+                return pre, {"verified": False, "method": "preflight"}
+
+        if decision.needs_approval:
             aid = self._request_approval(t, tool_name, args, side.value, decision.reason)
             self.set_status(t, "awaiting-authorization", goal=t.goal)
             verdict = await self.await_approval(aid, self.config.policy.approval_timeout_s)
@@ -246,7 +274,25 @@ class TaskController:
                                certainty="unknown"),
                     {"verified": False, "method": "denied"})
 
-        self.policy.consume_grant(decision.grant_id)
+        # Re-evaluate policy and cancellation immediately before the effect. The
+        # approval wait (or preflight) may have spanned a DEFCON/mode change or an
+        # emergency stop; a queued action must not run under a posture that now
+        # denies it outright. A "still needs approval" result is fine — the owner
+        # has already approved this exact action.
+        if t.id in self._cancels:
+            return ToolResult(ok=False, error="task cancelled",
+                              certainty="unknown"), {"verified": False}
+        recheck = self.policy.decide(tool_name, side, args)
+        if not recheck.allow and not recheck.needs_approval:
+            self.db.audit("policy.deny", target=tool_name,
+                          detail={"reason": recheck.reason, "task_id": t.id,
+                                  "note": "policy changed after authorisation"},
+                          severity="warn")
+            return (ToolResult(ok=False, error=f"denied by policy: {recheck.reason}",
+                               certainty="unknown"),
+                    {"verified": False, "method": "denied"})
+
+        self.policy.consume_grant(recheck.grant_id)
 
         attempt = self._open_attempt(t, tool_name, args, side.value, step_index)
         # Kernel services are the base; per-call extras may add, never remove.

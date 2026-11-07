@@ -208,7 +208,7 @@ class PolicyBroker:
 
 
 def _target_of(args: dict[str, Any]) -> str | None:
-    for key in ("path", "target", "url", "node", "host", "name", "command"):
+    for key in ("path", "target", "url", "node", "host", "name", "command", "app"):
         if key in args and args[key]:
             return str(args[key])
     return None

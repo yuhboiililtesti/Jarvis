@@ -15,12 +15,47 @@ export class HttpError extends Error {
   }
 }
 
+// Routes that govern authority (approvals, posture, settings, grants). These
+// require a credential even on loopback, so a local process cannot approve
+// actions or change security settings merely because it shares the interface.
+const PROTECTED_PREFIXES = ["/api/approvals", "/api/defcon", "/api/settings", "/api/grants"];
+
+function isProtected(path) {
+  return PROTECTED_PREFIXES.some((p) => path === p || path.startsWith(p + "/"));
+}
+
 export class Api {
   constructor(base = "") {
     this.base = base;
+    this._unlockTried = false;
   }
 
   async request(method, path, { body, headers, signal } = {}) {
+    const result = await this._doRequest(method, path, { body, headers, signal });
+    // A 401 on an authority-governing route means the owner has not unlocked
+    // yet. Prompt once for the API token and retry.
+    if (result.status === 401 && isProtected(path) && await this._maybeUnlock()) {
+      return this._doRequest(method, path, { body, headers, signal });
+    }
+    return result;
+  }
+
+  /** Unlock authority-governing routes by setting the owner session cookie. */
+  async unlock(token) {
+    return this._doRequest("POST", "/api/auth/unlock", { body: { token } });
+  }
+
+  async _maybeUnlock() {
+    if (this._unlockTried) return false;
+    this._unlockTried = true;
+    const token = window.prompt(
+      "JARVIS needs your API token (data/api-token) to approve actions or change settings:");
+    if (!token) return false;
+    const r = await this.unlock(token.trim());
+    return !!r.ok;
+  }
+
+  async _doRequest(method, path, { body, headers, signal } = {}) {
     const opts = { method, headers: { ...(headers || {}) }, signal };
     if (body !== undefined) {
       if (body instanceof FormData) {

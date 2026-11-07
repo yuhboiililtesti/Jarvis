@@ -92,7 +92,17 @@ LOCKOUT_S = 900.0
 AUDIT_MAX_PER_MINUTE = 300
 
 PUBLIC_PATHS = frozenset({"/pair", "/api/auth/pair"})        # network-gated, no token
-LOOPBACK_ONLY_PATHS = frozenset({"/api/auth/pair/new"})       # never remote, even with token
+LOOPBACK_ONLY_PATHS = frozenset({"/api/auth/pair/new", "/api/auth/unlock"})  # never remote
+
+# Paths that govern authority (approvals, posture, settings, grants). Even a
+# loopback (local) caller must present a valid credential: another local process
+# (browser, downloaded tool, plugin) must not approve actions or change security
+# settings merely because it shares the loopback interface.
+PROTECTED_PREFIXES = ("/api/approvals", "/api/defcon", "/api/settings", "/api/grants")
+
+
+def _path_protected(path: str) -> bool:
+    return any(path == p or path.startswith(p + "/") for p in PROTECTED_PREFIXES)
 
 FORWARDING_HEADERS = frozenset({b"x-forwarded-for", b"forwarded", b"x-real-ip",
                                 b"x-forwarded-host"})
@@ -498,6 +508,19 @@ class AuthGate:
         if path in LOOPBACK_ONLY_PATHS and not local:
             return Decision(False, 403, "loopback_only", remote=True, ip=peer)
         if local:
+            # Authority-governing routes are not free on loopback: require a
+            # credential (header, bearer, or session cookie) so a local process
+            # cannot approve actions or change posture/settings/grants.
+            if _path_protected(path):
+                cred, transport = _extract_credential(headers)
+                token = self.current_token()
+                if not cred:
+                    return Decision(False, 401, "missing_credentials", via="loopback", ip=peer)
+                if not token:
+                    return Decision(False, 401, "no_token_configured", via="loopback", ip=peer)
+                if self._credential_ok(cred, transport, token):
+                    return Decision(True, via=transport, ip=peer)
+                return Decision(False, 401, "invalid_credentials", via="loopback", ip=peer)
             return Decision(True, via="loopback", ip=peer)
 
         # ---- remote from here on
@@ -754,6 +777,36 @@ def _build_router(gate: AuthGate) -> APIRouter:
         ttl = float((payload or {}).get("ttl_s") or PAIR_CODE_TTL_S)
         return {"code": gate.issue_code(ttl), "expires_in_s": ttl,
                 "pair_url_path": "/pair"}
+
+    @router.post("/api/auth/unlock")
+    async def unlock(request: Request) -> Response:
+        """Set the owner session cookie from the API token (loopback only).
+
+        The HUD / owner tooling calls this once with the value of data/api-token
+        so authority-governing routes (approvals, DEFCON, settings, grants) accept
+        their requests without handing the token to every local process.
+        """
+        raw = (await request.body())[:512]
+        supplied = ""
+        try:
+            body = json.loads(raw or b"{}")
+            if isinstance(body, dict):
+                supplied = str(body.get("token", ""))
+        except (ValueError, UnicodeDecodeError):
+            supplied = ""
+        token = gate.current_token()
+        ok = bool(token and supplied) and hmac.compare_digest(
+            supplied.encode("latin-1", "replace"), token.encode("latin-1", "replace"))
+        if not ok:
+            gate.audit("auth.unlock_denied", ip="loopback", severity="warn",
+                       detail={"reason": "bad_token"})
+            return JSONResponse({"ok": False, "error": "invalid token"},
+                                status_code=401, headers={"cache-control": "no-store"})
+        resp: Response = JSONResponse({"ok": True, "unlocked": True})
+        resp.headers["cache-control"] = "no-store"
+        _set_cookie(resp, request)
+        gate.audit("auth.unlocked", ip="loopback")
+        return resp
 
     @router.get("/api/auth/status")
     async def status(request: Request) -> dict[str, Any]:
