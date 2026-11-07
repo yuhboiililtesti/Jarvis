@@ -1,0 +1,7 @@
+# Copy this folder to data/plugins/<id>/, rename it to your id, and edit.
+# Then: python -m jarvis plugins enable <id>   (pins these exact files)
+id = "_template"              # must equal the folder name; lowercase, digits, - or _
+version = "0.1.0"
+summary = "Example plugin: one read-only tool"
+modules = ["tools"]           # Python files in this folder, without .py
+max_side_effect = "none"      # none | network | local_write | local_exec | remote | destructive

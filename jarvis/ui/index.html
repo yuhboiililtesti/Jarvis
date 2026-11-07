@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en" data-reduced-motion="false">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>JARVIS — Command Center</title>
+  <!-- Absolute /static/ paths: the API serves this page at "/" and the assets under /static. -->
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/amber-theme.css" />
+</head>
+<body>
+  <a class="skip-link" href="#chat-input">Skip to conversation</a>
+
+  <!-- ── connection banner ────────────────────────────────────────────── -->
+  <div id="conn-banner" class="conn-banner" role="status" aria-live="polite" hidden>
+    <span class="conn-dot" aria-hidden="true"></span>
+    <span id="conn-banner-text">DISCONNECTED — reconnecting…</span>
+    <button type="button" id="conn-retry" class="btn btn-ghost btn-xs">Retry now</button>
+  </div>
+
+  <div id="app" class="app">
+
+    <!-- ── top bar ────────────────────────────────────────────────────── -->
+    <header class="topbar" role="banner">
+      <div class="brand">
+        <img src="/static/favicon.svg" alt="" class="brand-mark" width="26" height="26" />
+        <div class="brand-text">
+          <span class="brand-name" id="persona-name">JARVIS</span>
+          <span class="brand-sub" id="node-role" title="host role">role: unknown</span>
+        </div>
+      </div>
+
+      <div class="device-awareness" title="Display device is informational; authoritative identity must come from authenticated server enrollment">
+        <span class="device-kicker">YOU ARE CONNECTING FROM</span>
+        <span id="device-origin" class="device-name">Detecting client…</span>
+        <span class="device-divider">/</span>
+        <span class="device-kicker">EXECUTION</span>
+        <span id="execution-target" class="device-target">Core policy · APOS</span>
+      </div>
+      <div class="topbar-controls">
+        <!-- Shown whenever ANY microphone (browser or server) is open. -->
+        <div id="mic-live" class="mic-live" role="status" aria-live="assertive" hidden>
+          <span class="mic-dot" aria-hidden="true"></span>
+          <span id="mic-live-text">MIC LIVE</span>
+          <button type="button" id="mic-stop" class="btn btn-xs btn-mic-stop">Stop mic</button>
+        </div>
+        <label class="field">
+          <span class="field-label">Mode</span>
+          <select id="mode-select" class="select" aria-label="Operating mode">
+            <option value="ask">ask</option>
+            <option value="autonomous">autonomous</option>
+            <option value="readonly">readonly</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">DEFCON</span>
+          <select id="defcon-select" class="select" aria-label="DEFCON posture">
+            <option value="5">5 — peace</option>
+            <option value="4">4 — awareness</option>
+            <option value="3">3 — elevated</option>
+            <option value="2">2 — serious</option>
+            <option value="1">1 — lockdown</option>
+          </select>
+        </label>
+        <button type="button" id="palette-open" class="btn btn-ghost" title="Command palette (Ctrl+K)">
+          ⌘ K
+        </button>
+        <span class="clock" id="clock" aria-label="local time">--:--:--</span>
+        <span id="conn-badge" class="badge badge-unknown" role="status" aria-live="polite">CONNECTING</span>
+      </div>
+    </header>
+
+    <!-- ── subsystem strip: live, from the real endpoints ────────────────── -->
+    <nav class="systems-strip" aria-label="Subsystem status">
+      <button type="button" class="sys-chip" id="sys-core" data-target="diagnostics"
+              title="Core health — open Diagnostics">
+        <span class="sys-dot" aria-hidden="true"></span>
+        <span class="sys-name">CORE</span><span class="sys-state">…</span>
+      </button>
+      <button type="button" class="sys-chip" id="sys-runtime" data-target="runtime"
+              title="Persistent runtime — open Operations">
+        <span class="sys-dot" aria-hidden="true"></span>
+        <span class="sys-name">RUNTIME</span><span class="sys-state">…</span>
+      </button>
+      <button type="button" class="sys-chip" id="sys-sandbox" data-target="diagnostics"
+              title="Process containment — open Diagnostics">
+        <span class="sys-dot" aria-hidden="true"></span>
+        <span class="sys-name">SANDBOX</span><span class="sys-state">…</span>
+      </button>
+      <button type="button" class="sys-chip" id="sys-audit" data-target="diagnostics"
+              title="Audit-chain integrity — open Diagnostics">
+        <span class="sys-dot" aria-hidden="true"></span>
+        <span class="sys-name">AUDIT</span><span class="sys-state">…</span>
+      </button>
+    </nav>
+
+    <!-- ── main grid ──────────────────────────────────────────────────── -->
+    <main class="grid" role="main">
+
+      <!-- left: telemetry -->
+      <section class="col col-left" aria-label="Telemetry">
+        <div class="panel-head">
+          <h2 class="panel-title">Telemetry</h2>
+          <span class="stale-tag" id="telemetry-stale" hidden>STALE</span>
+        </div>
+
+        <div class="gauges" id="gauges">
+          <!-- filled by app.js; static skeleton keeps layout stable -->
+          <div class="gauge" data-metric="cpu">
+            <div class="gauge-top"><span class="gauge-name">CPU</span><span class="gauge-val" id="metric-cpu">—</span></div>
+            <div class="bar"><div class="bar-fill" id="bar-cpu"></div></div>
+            <canvas class="spark" id="spark-cpu" width="240" height="34" aria-hidden="true"></canvas>
+          </div>
+          <div class="gauge" data-metric="mem">
+            <div class="gauge-top"><span class="gauge-name">Memory</span><span class="gauge-val" id="metric-mem">—</span></div>
+            <div class="bar"><div class="bar-fill" id="bar-mem"></div></div>
+            <canvas class="spark" id="spark-mem" width="240" height="34" aria-hidden="true"></canvas>
+          </div>
+          <div class="gauge" data-metric="disk">
+            <div class="gauge-top"><span class="gauge-name">Disk</span><span class="gauge-val" id="metric-disk">—</span></div>
+            <div class="bar"><div class="bar-fill" id="bar-disk"></div></div>
+            <canvas class="spark" id="spark-disk" width="240" height="34" aria-hidden="true"></canvas>
+          </div>
+          <div class="gauge" data-metric="temp">
+            <div class="gauge-top"><span class="gauge-name">Temp</span><span class="gauge-val" id="metric-temp">—</span></div>
+            <div class="bar"><div class="bar-fill" id="bar-temp"></div></div>
+          </div>
+        </div>
+
+        <div class="kv-block">
+          <div class="kv-row"><span class="kv-k">LLM</span><span class="kv-v" id="llm-status">unavailable</span></div>
+          <div class="kv-row"><span class="kv-k">Model</span><span class="kv-v" id="llm-model">—</span></div>
+          <div class="kv-row"><span class="kv-k">Provider</span><span class="kv-v" id="llm-provider">—</span></div>
+          <div class="kv-row"><span class="kv-k">Core</span><span class="kv-v" id="health-core">—</span></div>
+          <div class="kv-row"><span class="kv-k">Tools</span><span class="kv-v" id="tool-count">—</span></div>
+          <div class="kv-row"><span class="kv-k">Voice</span><span class="kv-v" id="voice-summary">checking…</span></div>
+          <div class="kv-row"><span class="kv-k">Updated</span><span class="kv-v" id="telemetry-updated">never</span></div>
+        </div>
+
+        <div class="panel-head"><h2 class="panel-title">Posture</h2></div>
+        <div class="posture">
+          <span id="defcon-badge" class="badge badge-defcon5">DEFCON —</span>
+          <span id="mode-badge" class="badge badge-mode">mode: —</span>
+          <span id="mood-badge" class="badge badge-mood">mood: —</span>
+        </div>
+      </section>
+
+      <!-- centre: reactor + panels -->
+      <section class="col col-centre" aria-label="Core and panels">
+        <div class="stage">
+          <div class="reactor-wrap">
+            <canvas id="reactor" width="520" height="520" role="img"
+                    aria-label="Arc reactor: reflects live system state"></canvas>
+            <div class="reactor-overlay">
+              <div class="reactor-state" id="reactor-state">IDLE</div>
+              <div class="reactor-sub" id="reactor-sub">awaiting link</div>
+            </div>
+          </div>
+          <!-- Captions: what JARVIS heard and what it is saying right now. -->
+          <div id="captions" class="captions" aria-live="polite" hidden>
+            <p class="caption caption-you" hidden><span class="cap-who">You</span><span id="caption-you"></span></p>
+            <p class="caption caption-jarvis" hidden><span class="cap-who">Jarvis</span><span id="caption-jarvis"></span></p>
+          </div>
+        </div>
+
+        <div class="panel-tabs" role="tablist" aria-label="System panels">
+          <button class="tab is-active" role="tab" id="tab-tools" aria-controls="panel-tools" aria-selected="true" data-tab="tools">Tools</button>
+          <button class="tab" role="tab" id="tab-memory" aria-controls="panel-memory" aria-selected="false" data-tab="memory">Memory</button>
+          <button class="tab" role="tab" id="tab-tasks" aria-controls="panel-tasks" aria-selected="false" data-tab="tasks">Tasks</button>
+          <button class="tab" role="tab" id="tab-alerts" aria-controls="panel-alerts" aria-selected="false" data-tab="alerts">Alerts</button>
+          <button class="tab" role="tab" id="tab-runtime" aria-controls="panel-runtime" aria-selected="false" data-tab="runtime">Operations</button>
+          <button class="tab" role="tab" id="tab-nodes" aria-controls="panel-nodes" aria-selected="false" data-tab="nodes">Nodes</button>
+          <button class="tab" role="tab" id="tab-diagnostics" aria-controls="panel-diagnostics" aria-selected="false" data-tab="diagnostics">Diagnostics</button>
+          <button class="tab" role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="false" data-tab="settings">Settings</button>
+        </div>
+
+        <div class="panel-body" id="panel-body">
+          <div class="panel-pane is-active" id="panel-tools" role="tabpanel" aria-labelledby="tab-tools">
+            <div class="pane-toolbar">
+              <input type="search" id="tools-search" class="input" placeholder="Filter tools…" aria-label="Filter tools" />
+              <button type="button" class="btn btn-ghost btn-xs" id="tools-refresh">Refresh</button>
+            </div>
+            <div class="list" id="tools-list" aria-live="polite"><p class="empty">Loading tools…</p></div>
+          </div>
+
+          <div class="panel-pane" id="panel-memory" role="tabpanel" aria-labelledby="tab-memory" hidden>
+            <div class="pane-toolbar">
+              <button type="button" class="btn btn-ghost btn-xs" id="memory-refresh">Refresh</button>
+            </div>
+            <div class="list" id="memory-list" aria-live="polite"><p class="empty">Not loaded.</p></div>
+          </div>
+
+          <div class="panel-pane" id="panel-tasks" role="tabpanel" aria-labelledby="tab-tasks" hidden>
+            <div class="pane-toolbar">
+              <button type="button" class="btn btn-ghost btn-xs" id="tasks-refresh">Refresh</button>
+            </div>
+            <div class="list" id="tasks-list" aria-live="polite"><p class="empty">Not loaded.</p></div>
+          </div>
+
+          <div class="panel-pane" id="panel-alerts" role="tabpanel" aria-labelledby="tab-alerts" hidden>
+            <div class="pane-toolbar">
+              <button type="button" class="btn btn-ghost btn-xs" id="alerts-refresh">Refresh</button>
+            </div>
+            <div class="list" id="alerts-list" aria-live="polite"><p class="empty">Not loaded.</p></div>
+          </div>
+
+          <!-- Operations: the persistent runtime, its schedules and events. -->
+          <div class="panel-pane" id="panel-runtime" role="tabpanel" aria-labelledby="tab-runtime" hidden>
+            <div class="pane-toolbar">
+              <button type="button" class="btn btn-ghost btn-xs" id="runtime-refresh">Refresh</button>
+              <button type="button" class="btn btn-ghost btn-xs" id="runtime-tick"
+                      title="Run one tick now (queued event reactions only; scheduled jobs stay with the running Core)">Run tick</button>
+              <button type="button" class="btn btn-ghost btn-xs" id="ops-check"
+                      title="Run the self-diagnostics now">Run self-check</button>
+            </div>
+            <div class="runtime-grid" id="runtime-status" aria-live="polite">
+              <p class="empty">Loading runtime status…</p>
+            </div>
+
+            <h3 class="panel-subtitle">Scheduled jobs</h3>
+            <div class="list" id="runtime-jobs" aria-live="polite"><p class="empty">Not loaded.</p></div>
+
+            <h3 class="panel-subtitle">Recent runs</h3>
+            <div class="list" id="runtime-runs" aria-live="polite"><p class="empty">Not loaded.</p></div>
+
+            <h3 class="panel-subtitle">Event rules</h3>
+            <div class="list" id="runtime-rules" aria-live="polite"><p class="empty">Not loaded.</p></div>
+
+            <h3 class="panel-subtitle">Recent events</h3>
+            <div class="list" id="runtime-events" aria-live="polite"><p class="empty">Not loaded.</p></div>
+
+            <h3 class="panel-subtitle">Goals</h3>
+            <div class="list" id="runtime-goals" aria-live="polite"><p class="empty">Not loaded.</p></div>
+
+            <h3 class="panel-subtitle">Self-check</h3>
+            <div class="list" id="runtime-ops" aria-live="polite"><p class="empty">Not loaded.</p></div>
+
+            <form class="runtime-emit" id="runtime-emit">
+              <input type="text" id="runtime-topic" class="input"
+                     placeholder="event topic, e.g. disk.smart_warning" aria-label="Event topic" />
+              <input type="text" id="runtime-data" class="input"
+                     placeholder='optional JSON, e.g. {"smart": "warning"}' aria-label="Event JSON data" />
+              <button type="submit" class="btn">Emit event</button>
+            </form>
+            <p class="form-status" id="runtime-emit-status" role="status"></p>
+          </div>
+
+          <div class="panel-pane" id="panel-nodes" role="tabpanel" aria-labelledby="tab-nodes" hidden>
+            <div class="pane-toolbar">
+              <button type="button" class="btn btn-ghost btn-xs" id="nodes-refresh">Refresh</button>
+            </div>
+            <div class="list" id="nodes-list" aria-live="polite"><p class="empty">Not loaded.</p></div>
+          </div>
+
+          <div class="panel-pane" id="panel-diagnostics" role="tabpanel" aria-labelledby="tab-diagnostics" hidden>
+            <div class="pane-toolbar">
+              <button type="button" class="btn btn-ghost btn-xs" id="diag-rerun">Re-run checks</button>
+            </div>
+            <div class="list" id="diag-list" aria-live="polite"><p class="empty">Not run.</p></div>
+          </div>
+
+          <div class="panel-pane" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+            <form id="settings-form" class="settings-form">
+              <label class="field"><span class="field-label">Mode</span>
+                <select id="set-mode" class="select">
+                  <option value="ask">ask</option><option value="autonomous">autonomous</option><option value="readonly">readonly</option>
+                </select></label>
+              <label class="field"><span class="field-label">DEFCON</span>
+                <select id="set-defcon" class="select">
+                  <option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option>
+                </select></label>
+              <label class="field"><span class="field-label">UI scale</span>
+                <select id="set-ui-scale" class="select">
+                  <option value="0.85">85%</option>
+                  <option value="0.9">90%</option>
+                  <option value="0.95">95%</option>
+                  <option value="1">100%</option>
+                </select></label>
+              <label class="field"><span class="field-label">Voice enabled</span>
+                <input type="checkbox" id="set-voice-enabled" /></label>
+              <label class="field"><span class="field-label">Speak replies (TTS)</span>
+                <input type="checkbox" id="set-tts-enabled" /></label>
+              <label class="field"><span class="field-label">Persona name</span>
+                <input type="text" id="set-persona-name" class="input" placeholder="Jarvis" /></label>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary" id="settings-save">Save settings</button>
+                <button type="button" class="btn btn-ghost" id="settings-reload">Reload</button>
+              </div>
+              <p class="form-status" id="settings-status" role="status"></p>
+            </form>
+
+            <!-- Voice: changes apply immediately via /api/voice/select (runtime only). -->
+            <fieldset class="settings-form voice-settings" id="voice-settings">
+              <legend class="panel-title">Voice</legend>
+              <label class="field"><span class="field-label">Engine</span>
+                <select id="set-tts-engine" class="select"></select></label>
+              <label class="field"><span class="field-label">Voice</span>
+                <select id="set-tts-voice" class="select"></select></label>
+              <label class="field"><span class="field-label">Effect</span>
+                <select id="set-tts-effect" class="select">
+                  <option value="jarvis">jarvis (AI butler)</option><option value="none">none (stock voice)</option>
+                </select></label>
+              <label class="field"><span class="field-label">Effect strength <output id="set-tts-strength-out" for="set-tts-strength">50%</output></span>
+                <input type="range" id="set-tts-strength" min="0" max="100" step="5" value="50" /></label>
+              <label class="field"><span class="field-label">Speed (Kokoro) <output id="set-tts-speed-out" for="set-tts-speed">1.00×</output></span>
+                <input type="range" id="set-tts-speed" min="0.7" max="1.3" step="0.05" value="1" /></label>
+              <label class="field"><span class="field-label">Play replies on</span>
+                <select id="set-tts-output" class="select">
+                  <option value="browser">this browser</option><option value="server">server speaker</option><option value="both">both</option>
+                </select></label>
+              <label class="field"><span class="field-label">Review push-to-talk transcript before sending</span>
+                <input type="checkbox" id="set-voice-review" /></label>
+              <div class="form-actions">
+                <button type="button" class="btn" id="voice-audition">&#9654; Audition voice</button>
+              </div>
+              <p class="form-status" id="voice-settings-status" role="status">not loaded</p>
+            </fieldset>
+          </div>
+        </div>
+      </section>
+
+      <!-- right: activity feed -->
+      <section class="col col-right" aria-label="Activity feed">
+        <div class="panel-head">
+          <h2 class="panel-title">Activity</h2>
+          <div class="panel-head-actions">
+            <select id="feed-filter" class="select select-sm" aria-label="Filter activity">
+              <option value="all">all</option>
+              <option value="task">tasks</option>
+              <option value="tool">tools</option>
+              <option value="verify">verify</option>
+              <option value="alert">alerts</option>
+              <option value="voice">voice</option>
+              <option value="system">system</option>
+            </select>
+            <button type="button" class="btn btn-ghost btn-xs" id="feed-clear">Clear</button>
+          </div>
+        </div>
+        <ol class="feed" id="feed" aria-live="polite" aria-label="Recent events"></ol>
+      </section>
+    </main>
+
+    <!-- ── conversation ───────────────────────────────────────────────── -->
+    <section class="convo" aria-label="Conversation">
+      <div class="convo-head">
+        <h2 class="panel-title">Conversation</h2>
+        <span class="convo-status" id="chat-status" role="status">ready</span>
+        <span class="convo-status voice-state" id="voice-state" role="status" aria-live="polite"></span>
+        <span class="spacer"></span>
+        <button type="button" id="mute-btn" class="btn btn-ghost btn-xs" aria-pressed="false">🔈 Voice: on</button>
+      </div>
+      <div class="transcript" id="transcript" role="log" aria-live="polite" aria-relevant="additions text">
+        <p class="empty transcript-empty">No messages yet. Type below, hold Space (or the push-to-talk hotkey) to talk, or switch on Conversation for hands-free.</p>
+      </div>
+      <form class="composer" id="chat-form" autocomplete="off">
+        <textarea id="chat-input" class="input composer-input" rows="1"
+                  placeholder="Ask Jarvis… (Enter to send, Shift+Enter for newline)" aria-label="Message"></textarea>
+        <button type="button" id="ptt-btn" class="btn btn-ptt" aria-pressed="false"
+                title="Push to talk (hold Space or the configured hotkey)">Hold&nbsp;to&nbsp;talk</button>
+        <button type="button" id="convo-btn" class="btn btn-convo" aria-pressed="false"
+                title="Hands-free conversation: opens the microphone until you end it or stay silent">Conversation</button>
+        <button type="submit" id="send-btn" class="btn btn-primary">Send</button>
+      </form>
+      <p class="ptt-note" id="ptt-note" hidden></p>
+    </section>
+  </div>
+
+  <!-- ── approvals modal ─────────────────────────────────────────────── -->
+  <div class="modal-backdrop" id="approval-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="approval-title">
+      <div class="modal-head">
+        <h2 class="modal-title" id="approval-title">⚠ Authorisation required</h2>
+        <button type="button" class="btn btn-ghost btn-xs" id="approval-close" aria-label="Close">✕</button>
+      </div>
+      <div class="approval-list" id="approval-list"></div>
+    </div>
+  </div>
+
+  <!-- ── command palette ─────────────────────────────────────────────── -->
+  <div class="modal-backdrop" id="palette-modal" hidden>
+    <div class="modal modal-palette" role="dialog" aria-modal="true" aria-labelledby="palette-title">
+      <div class="modal-head">
+        <h2 class="modal-title" id="palette-title">Command palette <span class="hint">Ctrl+K</span></h2>
+        <button type="button" class="btn btn-ghost btn-xs" id="palette-close" aria-label="Close">✕</button>
+      </div>
+      <input type="text" id="palette-input" class="input palette-input" placeholder="Search tools and actions…" aria-label="Command palette search" />
+      <ul class="palette-results" id="palette-results" role="listbox" aria-label="Results"></ul>
+    </div>
+  </div>
+
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
+
+  <noscript>
+    <p style="color:#e6f7ff;padding:1rem">JARVIS HUD requires JavaScript. Enable it to see live telemetry and the conversation.</p>
+  </noscript>
+
+  <script type="module" src="/static/app.js"></script>
+  <script type="module" src="/static/device-context.js"></script>
+</body>
+</html>

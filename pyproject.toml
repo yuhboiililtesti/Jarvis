@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarvis"
+version = "0.1.0"
+description = "JARVIS - local-first personal assistant (Core + Node), inspired by Tony Stark's AI"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Topaz" }]
+keywords = ["assistant", "local-first", "voice", "ollama", "automation"]
+
+# Core runtime. Optional heavy deps live in extras so the Core can start
+# without the full voice stack installed.
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "httpx>=0.27",
+    "tomli>=2.0; python_version < '3.11'",
+    "websockets>=12.0",
+    "psutil>=5.9",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+voice = [
+    "faster-whisper>=1.0.3",
+    "numpy>=1.26",
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12.1",
+    "openwakeword>=0.6.0",
+    "webrtcvad>=2.0.10",
+    "piper-tts>=1.2.0",
+]
+compute = [
+    "sympy>=1.12",
+    "numpy>=1.26",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+jarvis = "jarvis.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["jarvis*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

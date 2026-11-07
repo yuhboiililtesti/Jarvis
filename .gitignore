@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# JARVIS runtime state (owner data — never commit)
+data/
+!data/.gitkeep
+
+# EDITH runtime state
+../Edith/data/
+
+# Secrets and credentials — never commit, under any circumstances
+config/jarvis.toml
+*.secrets.json
+secrets.json
+credentials.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS / editors
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
+
+# Owner-specific one-off / debug scripts (not JARVIS features)
+scripts/bridge-attempt.ps1
+t8.py

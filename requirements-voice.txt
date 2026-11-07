@@ -1,0 +1,14 @@
+# JARVIS - optional voice + compute stack.
+# These are heavier downloads. The Core runs without them; voice features
+# report themselves "unavailable" in Settings until installed.
+
+faster-whisper>=1.0.3
+numpy>=1.26
+sounddevice>=0.4.6
+soundfile>=0.12.1
+openwakeword>=0.6.0
+piper-tts>=1.2.0
+# Kokoro-82M TTS on onnxruntime (CPU). Model files: scripts/fetch-voices.ps1
+kokoro-onnx>=0.6.1
+scipy>=1.11            # voice effect chain + resampling (jarvis.voice.effects)
+sympy>=1.12

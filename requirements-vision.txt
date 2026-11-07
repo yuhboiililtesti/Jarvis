@@ -1,0 +1,9 @@
+# Optional: local vision (screen and image OCR).
+#
+# RapidOCR runs on ONNX Runtime, CPU-only, with its models bundled in the wheel;
+# nothing is uploaded. Pillow is also used for screen capture.
+#
+#   .venv\Scripts\python.exe -m pip install -r requirements-vision.txt
+#
+rapidocr_onnxruntime>=1.4.0
+Pillow>=10.0

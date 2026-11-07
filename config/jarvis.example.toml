@@ -1,0 +1,184 @@
+# JARVIS configuration — copy to jarvis.toml and edit.
+# Later sources win: defaults < this file < JARVIS_* environment variables.
+# Secrets never go here; see data/secrets.json or JARVIS_SECRET_<NAME>.
+
+core_name = "jarvis-core"
+host_role = "core"          # core | node
+log_level = "INFO"
+# data_dir = ""             # default: <project>/data
+
+[server]
+host = "127.0.0.1"          # keep local-only unless you have a reason
+port = 8765
+node_port = 2226            # enrolled-node agent port (SSH stays on 2225)
+cors_origins = ["http://127.0.0.1:8765"]
+allow_lan = false           # private cloud: python -m jarvis serve --lan (token required off-box)
+trusted_networks = []       # optional allow-list of CIDRs that may even try, e.g. ["10.0.0.0/24"]
+
+[llm]
+provider = "ollama"         # ollama | openai_compat | none
+base_url = "http://127.0.0.1:11434"
+model = "qwen2.5:7b-instruct"
+# Smaller host (16 GiB RAM / 6 GiB VRAM, e.g. APOS): use
+#   model = "qwen2.5:3b-instruct", num_ctx = 4096, keep_alive = "5m"
+# or override per host with JARVIS_LLM__MODEL / __NUM_CTX / __KEEP_ALIVE.
+fast_model = ""
+embed_model = "nomic-embed-text"
+temperature = 0.4
+top_p = 0.9
+num_ctx = 8192              # smaller context = faster prompt processing
+num_predict = 768           # cap reply length = snappier answers
+request_timeout_s = 180.0
+keep_alive = "30m"          # keep the model resident between turns
+fallback = []               # e.g. ["http://127.0.0.1:8080|local-model"]
+
+[persona]
+name = "Jarvis"
+address_as = "sir"
+formality = 0.85            # 0 dry .. 1 very formal
+humor = 0.45                # dry wit
+verbosity = 0.3             # 0 terse .. 1 verbose (terser = faster replies)
+british = true
+custom_instructions = ""
+
+[voice]
+enabled = true
+stt_enabled = true
+tts_enabled = true
+wake_enabled = false        # opt-in; needs openwakeword installed
+push_to_talk_hotkey = "ctrl+alt+space"
+stt_model = "base.en"       # small.en is more accurate but slower
+stt_device = "cpu"          # cpu | cuda (cuda is much faster on the 3080)
+stt_compute_type = "int8"
+tts_engine = "kokoro"         # kokoro | piper | null (falls back down tts_fallback)
+tts_fallback = ["piper"]
+kokoro_voice = "bm_fable"     # British male: bm_george | bm_lewis | bm_daniel | bm_fable
+kokoro_speed = 1.0
+# kokoro_dir = ""           # default: <project>/data/voices/kokoro
+effect = "jarvis"             # jarvis | none — AI-butler post-processing
+effect_strength = 0.5
+output = "browser"            # browser | server | both — who plays replies
+wake_model = "hey_jarvis"
+conversation_timeout_s = 8.0
+piper_voice = "en_GB-alan-medium"
+# piper_dir = ""            # default: <project>/data/voices
+volume = 0.65               # 0..1 — quieter default
+length_scale = 0.9          # <1 speaks faster (0.9 = ~10% quicker)
+sentence_silence = 0.08     # seconds between sentences
+input_device = ""           # name substring; empty = system default
+output_device = ""
+sample_rate = 16000
+
+[memory]
+backend = "sqlite"
+# db_path = ""
+embed_dim = 768
+retrieval_top_k = 6
+retention_days = 0          # 0 = keep forever
+private_by_default = false
+
+[knowledge]
+enabled = true
+roots = []                  # e.g. ["C:/Users/<USER>/Documentation"]
+chunk_chars = 1200
+max_file_mb = 5.0
+
+[integrations]               # free/self-hosted; each stays off until configured
+home_assistant_url = ""      # token goes in secret "home_assistant"
+weather_location = ""        # default place for weather.* (Open-Meteo, no key)
+smtp_host = ""               # drafts always work; sending needs this + secret "smtp"
+smtp_port = 587
+smtp_user = ""
+
+[policy]
+mode = "ask"                # ask | autonomous | readonly
+auto_allow = [
+  "system.info", "system.metrics", "system.processes",
+  "time.now", "time.convert",
+  "calc.eval",
+  "memory.search", "memory.recall",
+  "web.search", "web.fetch",
+  "notes.list", "notes.read",
+  "files.read", "files.list", "files.search",
+  "network.info", "network.ping", "network.ports",
+  "scheduler.list",
+  "compute.solve", "compute.list",
+  "nodes.status",
+  "discovery.scan", "monitoring.status",
+  "sandbox.status",
+  "vision.ocr", "vision.screen",
+  "anton.status", "anton.jobs", "anton.nodes", "anton.routines",
+]
+always_deny = []
+approval_timeout_s = 300.0
+
+[monitoring]
+enabled = true
+interval_s = 15.0
+cpu_warn = 90.0
+mem_warn = 90.0
+disk_warn = 90.0
+temp_warn_c = 85.0
+alert_cooldown_s = 600.0
+quiet_hours = ["23:30-07:00"]
+
+[night]
+enabled = false
+start = "01:00"
+end = "06:00"
+max_minutes = 240
+tasks = []
+# report_dir = ""           # default: <project>/data/night-reports
+
+[nodes]
+enabled = true
+token = ""                  # generated and stored in the db if empty
+# known = { laptop = "http://<NODE_IP>:2226" }
+[nodes.ssh]
+# laptop = { host = "<NODE_IP>", port = 2225, user = "<USER>" }
+
+[security]
+audit_enabled = true        # hash-chain the audit log and anchor it outside the db
+bind_local_only = true
+defcon = 5
+allow_private_fetch = false # web.fetch refuses loopback/LAN/metadata targets (SSRF guard)
+
+[sandbox]                   # containment for every process JARVIS starts
+enabled = true
+tier = "auto"               # auto | jobobject (Windows) | rlimit (POSIX) | none
+max_memory_mb = 2048        # per-process memory ceiling (0 = unlimited)
+max_processes = 32          # simultaneous processes in the tree (0 = unlimited)
+max_cpu_seconds = 0         # CPU-time ceiling (0 = unlimited)
+max_file_mb = 0             # largest file a child may write, POSIX tier only (0 = unlimited)
+wall_timeout_s = 30.0       # default wall-clock timeout
+kill_tree = true            # kill the whole process tree, not just the child
+scrub_env = true            # never hand JARVIS_SECRET_* (or stored secrets) to a child
+
+[runtime]                   # the persistent loop: operate, don't just answer
+enabled = true
+tick_s = 2.0                # how often due jobs / event reactions are checked
+lease_ttl_s = 30.0          # one Core owns the loop; a dead Core's lease expires
+max_jobs_per_tick = 5
+max_jobs_in_flight = 2      # running turns, not just claims per tick
+max_reactions_per_tick = 10
+max_reaction_tasks = 4      # concurrent reactions (approval can block one)
+catch_up_s = 3600.0         # a job later than this is recorded 'missed', not fired
+session_max_messages = 200  # durable working memory cap
+rule_cooldown_s = 5.0       # bounds a reaction that produces the event it reacts to
+event_retention_days = 30   # prune old events/fires on start
+max_events = 5000
+event_topics = ["alert", "security.*", "honeypot.*"]   # bus topics mirrored to the event log
+
+[goals]                     # durable multi-step planning
+enabled = true
+max_steps = 8
+max_attempts = 3
+auto_run = true             # the runtime advances planned goals
+per_tick = 1
+
+[ops]                       # self-diagnostics
+enabled = true
+interval_s = 60.0
+auto_repair_tunnel = true   # restart the local SSH tunnel when a node is unreachable
+repair_cooldown_s = 120.0
+
