@@ -1,6 +1,6 @@
-# JARVIS - Core runtime requirements (Windows Core host / Linux node)
+# JARVIS - Core runtime requirements (Windows / Linux / macOS)
 # Install:  python -m pip install -r requirements.txt
-# Voice stack is optional and installed separately (see scripts/install.ps1):
+# Voice stack is optional and installed separately:
 #   python -m pip install -r requirements-voice.txt
 
 fastapi>=0.115

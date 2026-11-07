@@ -49,11 +49,39 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Voice -Model
 This creates `.venv`, installs dependencies, pulls the voice stack and local model, writes
 `config/jarvis.toml`, and runs `jarvis doctor`.
 
+### Install (Linux / Ubuntu)
+
+```bash
+bash scripts/install.sh --voice --model
+```
+
+Mirrors the Windows installer: creates `.venv`, installs dependencies, optionally pulls the
+voice stack and local model, writes `config/jarvis.toml`, and runs `jarvis doctor`. For the
+voice stack on Ubuntu/Debian, install the system audio deps first:
+
+```bash
+sudo apt install -y libportaudio2 libsndfile1 ffmpeg espeak-ng
+```
+
+Run it as a background **systemd user service** (no root):
+
+```bash
+bash scripts/install-systemd.sh          # enable + start jarvis-core
+systemctl --user status jarvis-core      # check it
+journalctl --user -u jarvis-core -f      # follow logs
+```
+
 ### Run it
 
 ```powershell
+# Windows
 scripts\run-and-open.cmd        # starts hidden, waits for the port, opens the HUD
 scripts\stop-jarvis.cmd         # stops it
+```
+
+```bash
+# Linux / macOS
+./scripts/run.sh                # serve the API + HUD in the foreground
 ```
 
 Or from any platform:
