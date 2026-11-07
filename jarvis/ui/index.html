@@ -291,6 +291,20 @@
               <p class="form-status" id="settings-status" role="status"></p>
             </form>
 
+            <!-- Unlock authority routes (approvals / settings / DEFCON / grants) by
+                 pasting the API token. Sets a session cookie via /api/auth/unlock. -->
+            <fieldset class="settings-form" id="security-unlock">
+              <legend class="panel-title">Security unlock</legend>
+              <label class="field"><span class="field-label">API token</span>
+                <input type="password" id="set-api-token" class="input" autocomplete="off"
+                       placeholder="paste data/api-token to unlock approvals &amp; settings" /></label>
+              <div class="form-actions">
+                <button type="button" class="btn btn-primary" id="unlock-btn">Unlock</button>
+                <button type="button" class="btn btn-ghost" id="lock-btn">Lock</button>
+              </div>
+              <p class="form-status" id="unlock-status" role="status"></p>
+            </fieldset>
+
             <!-- Voice: changes apply immediately via /api/voice/select (runtime only). -->
             <fieldset class="settings-form voice-settings" id="voice-settings">
               <legend class="panel-title">Voice</legend>

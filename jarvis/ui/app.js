@@ -929,6 +929,23 @@ async function onDefconChange(value) {
   await refreshHealth();
 }
 
+/* ── security unlock ─────────────────────────────────────────────────────── */
+async function doUnlock() {
+  const status = $("unlock-status");
+  const token = $("set-api-token").value.trim();
+  if (!token) { status.textContent = "Paste the API token first."; return; }
+  status.textContent = "unlocking…";
+  const r = await api.unlock(token);
+  if (r.ok) { status.textContent = "Unlocked — approvals & settings enabled."; $("set-api-token").value = ""; }
+  else status.textContent = `Unlock failed: ${r.error || r.status}`;
+}
+
+async function doLock() {
+  const status = $("unlock-status");
+  const r = await api.post("/api/auth/logout");
+  status.textContent = r.ok ? "Locked." : `Lock failed: ${r.error || r.status}`;
+}
+
 /* ── approvals ─────────────────────────────────────────────────────────── */
 /** Reconcile the approval modal with the server (survives reloads and reconnects). */
 async function syncApprovals() {
@@ -1441,6 +1458,8 @@ function wire() {
   });
   $("settings-reload").addEventListener("click", loadSettings);
   $("set-ui-scale").addEventListener("change", (e) => applyUiScale(e.target.value));
+  $("unlock-btn").addEventListener("click", doUnlock);
+  $("lock-btn").addEventListener("click", doLock);
 
   // chat
   $("chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendMessage($("chat-input").value); });
