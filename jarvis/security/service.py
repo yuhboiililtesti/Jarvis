@@ -336,9 +336,16 @@ class SecurityService:
             elif action in ("tool.error", "tool.fail") or (
                     action == "tool.call" and detail.get("ok") is False):
                 buckets["tool_failures"].append(record)
-            elif action in ("auth.fail", "login.fail", "node.auth.fail",
-                            "secrets.denied", "auth.denied"):
+            elif action in ("auth.fail", "login.fail", "node.auth.fail", "secrets.denied"):
                 buckets["auth_failures"].append(record)
+            elif action == "auth.denied":
+                # "missing_credentials" is the benign "not yet unlocked" state —
+                # e.g. the HUD polling authority routes before the owner unlocks
+                # — not a credential *failure*. Only an actual failed credential
+                # attempt (a wrong token, or a lockout) is suspicious.
+                if detail.get("reason") in ("invalid_credentials", "locked_out",
+                                            "lockout_started"):
+                    buckets["auth_failures"].append(record)
 
         raised: list[str] = []
         for name, records in buckets.items():

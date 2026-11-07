@@ -109,3 +109,40 @@ def test_unlock_endpoint_sets_session_cookie(kernel):
         r = client.post("/api/auth/unlock", json={"token": token})
         assert r.status_code == 200
         assert client.post("/api/defcon", json={"level": 3}).status_code == 200
+
+
+# ----------------------------------------------------------------- audit tail ---
+
+def _audit_alerts(db):
+    return [dict(r) for r in db.query(
+        "SELECT title FROM alerts ORDER BY id DESC LIMIT 20")]
+
+
+def test_audit_tail_ignores_missing_credentials(kernel):
+    sec = kernel.services.get("security")
+    if sec is None or not hasattr(sec, "audit_tail"):
+        pytest.skip("security service not loaded")
+    db = kernel.db
+    # "not yet unlocked" 401s are benign and must not raise an auth-failure alert.
+    for _ in range(5):
+        db.audit("auth.denied", actor="remote:127.0.0.1", target="/api/approvals",
+                 detail={"reason": "missing_credentials", "status": 401})
+    db.kv_set("security.audit_tail.id", 0)
+    sec.audit_tail()
+    titles = [a["title"] for a in _audit_alerts(db)]
+    assert "Suspicious audit pattern: auth failures" not in titles
+
+
+def test_audit_tail_alerts_on_invalid_credentials(kernel):
+    sec = kernel.services.get("security")
+    if sec is None or not hasattr(sec, "audit_tail"):
+        pytest.skip("security service not loaded")
+    db = kernel.db
+    # A burst of *wrong* credentials is a genuine suspicious pattern.
+    for _ in range(5):
+        db.audit("auth.denied", actor="remote:192.168.1.7", target="/api/ping",
+                 detail={"reason": "invalid_credentials", "status": 401})
+    db.kv_set("security.audit_tail.id", 0)
+    sec.audit_tail()
+    titles = [a["title"] for a in _audit_alerts(db)]
+    assert "Suspicious audit pattern: auth failures" in titles
