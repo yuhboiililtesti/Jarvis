@@ -63,6 +63,12 @@ voice stack on Ubuntu/Debian, install the system audio deps first:
 sudo apt install -y libportaudio2 libsndfile1 ffmpeg espeak-ng
 ```
 
+Fetch the local TTS voice models (Kokoro + Piper, with SHA-256 verification):
+
+```bash
+bash scripts/fetch-voices.sh
+```
+
 Run it as a background **systemd user service** (no root):
 
 ```bash
