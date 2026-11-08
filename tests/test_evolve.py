@@ -338,6 +338,48 @@ def test_c_code_benchmark_compiles_and_times():
     assert res.best.genome["opt"] >= 2
 
 
+# ------------------------------------------------------------- games ---------
+
+def test_tictactoe_rules():
+    from jarvis.evolve import TicTacToe
+    g = TicTacToe([1, 1, 1, -1, -1, 0, 0, 0, 0], player=1)
+    assert g.winner() == 1 and g.terminal()
+    assert g.features() and len(g.features()) == 9
+    empty = TicTacToe()
+    assert empty.moves() == list(range(9))
+
+
+def test_greedy_move_takes_immediate_win():
+    from jarvis.evolve import TicTacToe, greedy_move
+    # X can win on the top row
+    g = TicTacToe([1, 1, 0, -1, -1, 0, 0, 0, 0], player=1)
+    assert greedy_move(g, [0.0] * 9) == 2
+
+
+def test_evolved_heuristic_beats_random():
+    from jarvis.evolve import TicTacToe, evolve_heuristic, evaluate_against_random
+    res = evolve_heuristic(TicTacToe, generations=15, population=30,
+                           games_per_opponent=4, seed=3)
+    report = evaluate_against_random(res.best.genome, TicTacToe, games=80, seed=7)
+    # the evolved player must win the majority against a random mover
+    assert report["win_rate"] >= 0.6
+
+
+def test_connect4_playable():
+    from jarvis.evolve import Connect4, greedy_move, play_game
+    w = [0.1] * len(Connect4().features())
+    r = play_game(w, w, Connect4)
+    assert r in (-1, 0, 1)
+    assert greedy_move(Connect4(), w) in range(7)
+
+
+def test_cluster_profile_lists_local():
+    from jarvis.evolve import cluster_profile
+    cluster = cluster_profile()
+    assert cluster and cluster[0]["reachable"] is True
+    assert any(m.get("name") in ("pc-001", "apos", "laptop") for m in cluster)
+
+
 # ------------------------------------------------------------- wiring -------
 
 def test_evolve_service_is_wired(kernel):
