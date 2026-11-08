@@ -137,6 +137,75 @@ def test_auto_runner_produces_report():
     assert any(e["kind"] == "experiment_done" for e in events)
 
 
+# -------------------------------------------------------- settings genome -----
+
+def test_settings_space_sampling_and_mutation():
+    from jarvis.evolve import Field, SettingsSpace, settings_spec
+    import random
+    space = SettingsSpace("t", {
+        "n": Field("int", low=1, high=9),
+        "r": Field("float", low=0.0, high=1.0),
+        "b": Field("bool"),
+        "c": Field("choice", choices=("a", "b", "c")),
+    })
+    spec = settings_spec(space)
+    rng = random.Random(0)
+    g = spec.random(rng)
+    assert 1 <= g["n"] <= 9 and 0.0 <= g["r"] <= 1.0
+    assert g["b"] in (True, False) and g["c"] in ("a", "b", "c")
+    g2 = spec.mutate(g, rng)
+    assert set(g2) == set(g)  # same keys, legal values
+    assert 1 <= g2["n"] <= 9 and g2["c"] in ("a", "b", "c")
+    a, b = spec.crossover(g, g2, rng)
+    assert 1 <= a["n"] <= 9 and 1 <= b["n"] <= 9
+
+
+def test_command_benchmark_measures_wall_time():
+    from jarvis.evolve import command_benchmark
+    fitness = command_benchmark(
+        'python -c "import time; time.sleep(0.02 * {level})"', runs=1, warmup=0)
+    fast = fitness({"level": 1})
+    slow = fitness({"level": 5})
+    assert fast < slow  # real wall-clock scaling
+
+
+def test_system_tuner_finds_fastest_command_parameter():
+    from jarvis.evolve import SystemTuner, SettingsSpace, Field, command_benchmark
+    space = SettingsSpace("sleep", {"level": Field("int", low=1, high=9)})
+    fitness = command_benchmark(
+        'python -c "import time; time.sleep(0.02 * {level})"', runs=1, warmup=0)
+    tuner = SystemTuner(space, fitness)
+    res = tuner.tune(generations=12, population=15, seed=0)
+    assert res.best.genome["level"] <= 2  # converges to the fastest setting
+
+
+def test_process_memory_and_tcp_latency_are_real():
+    import os
+    from jarvis.evolve import process_memory, tcp_latency
+    mem = process_memory(os.getpid(), runs=1)  # this test process itself
+    assert mem({}) > 0
+    latency = tcp_latency("127.0.0.1", 8765, runs=1)  # core or closed port — either
+    assert latency({}) == float("inf") or latency({}) < 5000.0
+
+
+def test_tune_tools_registered_and_gated(kernel):
+    from jarvis.tools import REGISTRY
+    names = REGISTRY.names()
+    assert "evolve.tune" in names and "evolve.tune_command" in names
+    assert "evolve.tune" in kernel.config.policy.auto_allow          # measurement-only
+    assert "evolve.tune_command" not in kernel.config.policy.auto_allow  # gated
+
+
+@pytest.mark.asyncio
+async def test_tune_command_service_and_tool(kernel):
+    svc = kernel.services["evolve"]
+    res = await svc.tune_command(
+        'python -c "import time; time.sleep(0.02 * {level})"',
+        low=1, high=9, runs=1, generations=10)
+    assert res["kind"] == "tune:command"
+    assert res["result"]["best"]["genome"]["level"] <= 2
+
+
 # ------------------------------------------------------------- wiring -------
 
 def test_evolve_service_is_wired(kernel):

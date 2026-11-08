@@ -157,3 +157,77 @@ class EvolveStatusTool(BaseTool):
         if svc is None:
             return _missing()
         return ToolResult(ok=True, data=svc.status())
+
+
+@register(["evolve.tune", "evolve.tune_ollama"])
+class EvolveTuneTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.tune",
+        summary="Tune real server settings by measuring them (Ollama inference latency).",
+        category="evolve",
+        side_effect=SideEffect.NONE,   # measurement only — nothing is written
+        params=(
+            ToolParam("target", "string", "Target to tune.", default="ollama",
+                      enum=("ollama",)),
+            ToolParam("generations", "integer", "Generations (small — each is a real call).", default=8),
+            ToolParam("population", "integer", "Population size.", default=10),
+        ),
+        returns="object with the best settings and their measured latency",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        target = str(kwargs.get("target", "ollama"))
+        if target != "ollama":
+            return ToolResult(ok=False, error=f"unsupported target {target!r} (only 'ollama')")
+        res = await svc.tune_ollama(
+            generations=int(kwargs.get("generations", 8)),
+            population=int(kwargs.get("population", 10)))
+        if "ok" in res and res["ok"] is False:
+            return ToolResult(ok=False, error=res["error"])
+        best = res["result"]["best"]
+        return ToolResult(ok=True, data={
+            "target": target,
+            "best_settings": best["genome"],
+            "measured_seconds": best["fitness"],
+            "generations": res["result"]["generations_run"],
+        })
+
+
+@register(["evolve.tune_command", "evolve.benchmark_tune"])
+class EvolveTuneCommandTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.tune_command",
+        summary="Evolve one integer parameter ({level}) of a shell command, measuring wall time.",
+        category="evolve",
+        side_effect=SideEffect.LOCAL_EXEC,  # runs the command repeatedly — gated
+        params=(
+            ToolParam("command", "string", "Shell command with a {level} placeholder.", required=True),
+            ToolParam("low", "integer", "Parameter lower bound.", required=True),
+            ToolParam("high", "integer", "Parameter upper bound.", required=True),
+            ToolParam("runs", "integer", "Measurements per candidate.", default=2),
+            ToolParam("generations", "integer", "Generations.", default=15),
+        ),
+        returns="object with the best parameter value and its mean wall time",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        res = await svc.tune_command(
+            str(kwargs.get("command")),
+            low=int(kwargs.get("low")),
+            high=int(kwargs.get("high")),
+            runs=int(kwargs.get("runs", 2)),
+            generations=int(kwargs.get("generations", 15)))
+        if "ok" in res and res["ok"] is False:
+            return ToolResult(ok=False, error=res["error"])
+        best = res["result"]["best"]
+        return ToolResult(ok=True, data={
+            "best_parameter": best["genome"].get("level"),
+            "mean_seconds": best["fitness"],
+            "generations": res["result"]["generations_run"],
+        })

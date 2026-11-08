@@ -129,3 +129,48 @@ class EvolveService:
         if not data:
             return {"available": True, "last": None}
         return {"available": True, "last": json.loads(json.dumps(data, default=str))}
+
+    # -- real-system tuning ----------------------------------------------
+    async def tune_ollama(self, *, generations: int = 8, population: int = 10,
+                          prompt: str = "Say OK.") -> dict[str, Any]:
+        """Tune Ollama request settings by measuring real inference latency.
+
+        Expensive: every candidate is a real model call, so budgets are small
+        by design. Read-only (measurement only; nothing is written).
+        """
+        from .measure import ollama_latency
+        from .tuner import SystemTuner, ollama_space
+        llm = getattr(getattr(self.j, "config", None), "llm", None)
+        if llm is None:
+            return {"ok": False, "error": "no llm config"}
+        fitness = ollama_latency(llm.base_url, llm.model, prompt, runs=1, warmup=0)
+        tuner = SystemTuner(ollama_space(), fitness, name="ollama")
+
+        def _run() -> RunResult:
+            return tuner.tune(generations=generations, population=population,
+                              max_seconds=600.0)
+
+        result = await asyncio.to_thread(_run)
+        return self._record(result, "tune:ollama")
+
+    async def tune_command(self, template: str, *, low: int, high: int,
+                           runs: int = 2, generations: int = 15) -> dict[str, Any]:
+        """Evolve one integer parameter (``{level}``) of a shell command by
+        measuring its wall time. Runs the command repeatedly — bounded."""
+        from .measure import command_benchmark
+        from .settings import Field, SettingsSpace
+        from .tuner import SystemTuner
+        if "{level}" not in template:
+            return {"ok": False, "error": "template must contain a {level} placeholder"}
+        if not 1 <= low < high <= 10000:
+            return {"ok": False, "error": "need 1 <= low < high <= 10000"}
+        space = SettingsSpace("command", {"level": Field("int", low=int(low), high=int(high))})
+        fitness = command_benchmark(template, runs=runs)
+        tuner = SystemTuner(space, fitness, name="command")
+
+        def _run() -> RunResult:
+            return tuner.tune(generations=generations, population=20,
+                              max_seconds=600.0)
+
+        result = await asyncio.to_thread(_run)
+        return self._record(result, "tune:command")

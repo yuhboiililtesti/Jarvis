@@ -11,6 +11,10 @@ from .genome import (GenomeSpec, evaluate_expression, expression_spec,
 from .meta import CONFIG_SPACE, config_spec, self_tune
 from .objectives import (ackley, griewank, maximize, minimize, rastrigin,
                          rosenbrock, sphere, symbolic_regression)
+from .settings import Field, SettingsSpace, settings_spec
+from .measure import command_benchmark, ollama_latency, process_memory, tcp_latency
+from .tuner import (SystemTuner, ollama_space, minecraft_space, gzip_space,
+                    build_jobs_space)
 from .auto import AutoRunner, auto_run
 from .service import EvolveService
 
@@ -21,6 +25,10 @@ __all__ = [
     "CONFIG_SPACE", "config_spec", "self_tune",
     "symbolic_regression", "minimize", "maximize", "sphere", "rastrigin",
     "ackley", "rosenbrock", "griewank",
+    "Field", "SettingsSpace", "settings_spec",
+    "command_benchmark", "ollama_latency", "process_memory", "tcp_latency",
+    "SystemTuner", "ollama_space", "minecraft_space", "gzip_space",
+    "build_jobs_space",
     "AutoRunner", "auto_run",
     "EvolveService",
 ]

@@ -133,6 +133,20 @@ def cli_main(argv: list[str] | None = None) -> int:
     p.add_argument("--minutes", type=float, default=10.0)
     p.add_argument("--report", default=None, help="path to write the JSON report")
 
+    p = sub.add_parser("tune", help="tune real server settings (Ollama latency)")
+    p.add_argument("--target", default="ollama", choices=("ollama",))
+    p.add_argument("--generations", type=int, default=8)
+    p.add_argument("--population", type=int, default=10)
+    p.add_argument("--base-url", default="http://127.0.0.1:11434")
+    p.add_argument("--model", default="qwen2.5:3b-instruct")
+
+    p = sub.add_parser("tune-command", help="evolve one {level} parameter of a command")
+    p.add_argument("--command", required=True, help="shell command with a {level} placeholder")
+    p.add_argument("--low", type=int, required=True)
+    p.add_argument("--high", type=int, required=True)
+    p.add_argument("--runs", type=int, default=2)
+    p.add_argument("--generations", type=int, default=15)
+
     sub.add_parser("demo", help="run all demonstrations")
     sub.add_parser("gui", help="launch the desktop GUI")
 
@@ -152,6 +166,31 @@ def cli_main(argv: list[str] | None = None) -> int:
     elif args.cmd == "auto":
         from .auto import auto_run, _print_report
         _print_report(auto_run(args.minutes, args.report))
+    elif args.cmd == "tune":
+        from .measure import ollama_latency
+        from .tuner import SystemTuner, ollama_space
+        fitness = ollama_latency(args.base_url, args.model, "Say OK.", runs=1, warmup=0)
+        tuner = SystemTuner(ollama_space(), fitness, name="ollama")
+        t0 = time.time()
+        res = tuner.tune(generations=args.generations, population=args.population,
+                         max_seconds=600.0)
+        print("\n=== tune: ollama ===")
+        print(f"best settings: {res.best.genome}")
+        print(f"measured latency: {res.best.fitness:.3f}s")
+        print(f"wall time: {time.time() - t0:.1f}s")
+    elif args.cmd == "tune-command":
+        from .measure import command_benchmark
+        from .settings import Field, SettingsSpace
+        from .tuner import SystemTuner
+        space = SettingsSpace("command", {"level": Field("int", low=args.low, high=args.high)})
+        fitness = command_benchmark(args.command, runs=args.runs)
+        tuner = SystemTuner(space, fitness, name="command")
+        t0 = time.time()
+        res = tuner.tune(generations=args.generations, population=20, max_seconds=600.0)
+        print("\n=== tune-command ===")
+        print(f"best parameter: {res.best.genome['level']}")
+        print(f"mean wall time: {res.best.fitness:.4f}s")
+        print(f"wall time: {time.time() - t0:.1f}s")
     elif args.cmd == "demo":
         demo()
     elif args.cmd == "gui":

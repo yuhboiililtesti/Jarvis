@@ -300,6 +300,54 @@ def gui_main() -> None:
     st.run_btn = st.add_button(
         lambda: _launch(st, root, status, run_selftune), 2)
 
+    # ---------------------------------------------------- server tuning tab ---
+    tune = RunPane(notebook, "▶  Tune it (measure reality)")
+    notebook.add(tune, text=" Server tuning ")
+    t_target = tk.StringVar(value="command")
+    ttk.Label(tune, text="Target").grid(row=0, column=0, sticky="w", pady=3)
+    ttk.Combobox(tune, textvariable=t_target, values=("command", "ollama"),
+                 state="readonly", width=30).grid(row=0, column=1, sticky="w")
+    t_cmd = tk.StringVar(value='python -c "import time; time.sleep(0.02 * {level})"')
+    t_low = tk.StringVar(value="1")
+    t_high = tk.StringVar(value="9")
+    tune.field(1, "Command (with {level})", t_cmd)
+    tune.field(2, "Parameter range (low)", t_low)
+    tune.field(3, "Parameter range (high)", t_high)
+
+    def run_tune(cb):
+        def work() -> str:
+            target = t_target.get()
+            if target == "command":
+                from .measure import command_benchmark
+                from .settings import Field, SettingsSpace
+                from .tuner import SystemTuner
+                space = SettingsSpace("command", {
+                    "level": Field("int", low=int(t_low.get()), high=int(t_high.get()))})
+                fitness = command_benchmark(t_cmd.get(), runs=2)
+                tuner = SystemTuner(space, fitness, name="command")
+                res = tuner.tune(generations=15, population=20,
+                                 on_generation=cb, max_seconds=600.0)
+                return (f"Tuned command parameter:\n\n"
+                        f"    best {list(res.best.genome)[0]} = {list(res.best.genome.values())[0]}\n\n"
+                        f"Mean wall time: {res.best.fitness:.4f}s\n"
+                        f"Generations:    {res.generations_run}")
+            # ollama
+            from .measure import ollama_latency
+            from .tuner import SystemTuner, ollama_space
+            fitness = ollama_latency("http://127.0.0.1:11434", "qwen2.5:3b-instruct",
+                                     "Say OK.", runs=1, warmup=0)
+            tuner = SystemTuner(ollama_space(), fitness, name="ollama")
+            res = tuner.tune(generations=8, population=10,
+                             on_generation=cb, max_seconds=900.0)
+            return (f"Tuned Ollama request settings:\n\n"
+                    f"    {res.best.genome}\n\n"
+                    f"Measured latency: {res.best.fitness:.3f}s\n"
+                    f"Generations:      {res.generations_run}")
+        return work
+
+    tune.run_btn = tune.add_button(
+        lambda: _launch(tune, root, status, run_tune), 4)
+
     # ------------------------------------------------------------- auto tab ---
     auto = ttk.Frame(notebook, padding=8)
     notebook.add(auto, text=" ⚙ Auto ")
