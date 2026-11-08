@@ -7,7 +7,7 @@ entirely on your own hardware, with **no paid API and no token cap** by default.
 > repository is the actual implementation.
 
 **Author:** Topaz · **License:** [MIT](LICENSE) · **Status:** implemented and tested
-(1,021 tests passing, 123 tools).
+(1,052 tests passing, 127 tools).
 
 ---
 
@@ -131,6 +131,7 @@ on the LAN. See [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) and [`docs/CAPABILITY-
 | **Persistent runtime**: tick loop, single-owner lease, durable scheduler, event engine, durable working memory | ✅ |
 | **Durable goals**: planner → stored steps → resumable execution through the controller | ✅ |
 | **Learning**: outcome logging, lesson reinforcement, recall-augmented turns | ✅ |
+| **EVOLVE engine**: evolutionary search (genomes, populations, meta self-tuning), CLI + GUI | ✅ |
 | **Self-diagnostics**: subsystem checks and one bounded, audited repair | ✅ |
 | **MCP server**: other agents can call the read-only tool surface | ✅ |
 | **Vision**: local OCR over an image or the live screen (`vision.ocr`, `vision.screen`) | ✅ |
@@ -139,7 +140,7 @@ on the LAN. See [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) and [`docs/CAPABILITY-
 | Independent verifier (a tool's own "success" never settles a task) | ✅ |
 | **LLM router**: Ollama local-first, OpenAI-compatible, frontier tier (Anthropic/Gemini/Groq), typed stream errors, eligible-only fallback | ✅ |
 | Persona engine (JARVIS tone: measured, dry, addresses you as "sir") | ✅ |
-| Tool registry + tool contract + **123 built-in tools** across 20+ categories | ✅ |
+| Tool registry + tool contract + **127 built-in tools** across 20+ categories | ✅ |
 | Plugin system: discover → inspect → pin hash → load, with per-plugin side-effect ceiling | ✅ |
 | Sandbox: process containment (Windows Job Object / POSIX rlimits), kill-tree, resource caps, secret-free child env | ✅ |
 | Memory: SQLite + FTS5 keyword + vector recall, provenance, per-user isolation | ✅ |
@@ -239,6 +240,8 @@ python -m jarvis init             # write config and data dirs
 python -m jarvis night "…"        # run the Night Protocol now
 python -m jarvis nodes            # run the node agent (satellite side)
 python -m jarvis eval core        # run the held-out evaluation suite
+python -m jarvis.evolve demo      # EVOLVE: run all evolution demonstrations
+python -m jarvis.evolve gui       # EVOLVE: desktop GUI
 ```
 
 ---
@@ -263,7 +266,7 @@ python -m jarvis eval core            # run the held-out suite
 python -m pytest -q
 ```
 
-**1,021 tests pass, 2 skipped** (no local model, voice stack or network required for the
+**1,052 tests pass, 2 skipped** (no local model, voice stack or network required for the
 test suite).
 
 ---
@@ -275,11 +278,12 @@ jarvis/
   core/       kernel, agent turn loop
   llm/        providers (Ollama, OpenAI-compatible, Anthropic, Gemini, Groq), router
   persona/    JARVIS tone and system prompt
-  tools/      base contract, registry, builtin/* tools (123)
+  tools/      base contract, registry, builtin/* tools (127)
   plugins/    verified plugin loader (discover → pin hash → load)
   runtime/    persistent loop: scheduler, event engine, durable sessions
   goals/      durable planner/executor
   learning/   outcome-based self-adaptation
+  evolve/     evolutionary engine (genomes, populations, meta self-tuning; CLI + GUI)
   planner/    task planning engine
   tasks/      durable controller, verifier
   policy/     permission broker, secrets
