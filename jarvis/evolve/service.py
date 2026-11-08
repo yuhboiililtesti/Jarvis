@@ -198,3 +198,126 @@ class EvolveService:
             except Exception as exc:  # pragma: no cover
                 log.debug("evolve bus publish failed: %s", exc)
         return report
+
+    # -- evolve the agent itself -----------------------------------------
+    async def evolve_agent(self, *, generations: int = 4, population: int = 6,
+                           task_ids: list[str] | None = None,
+                           max_seconds: float = 1800.0) -> dict[str, Any]:
+        """Evolve the agent's own behaviour against its held-out eval score.
+
+        Genome = the agent's persona + LLM knobs (:func:`evolve.agent_space`);
+        fitness = mean deterministic-oracle score over an eval-suite subset
+        (lower cost = better behaviour). Original settings are restored after
+        the run — the evolved settings are returned as *data*, never silently
+        applied. Bounded (small populations, stagnation stop, wall-clock cap).
+        """
+        import random as _random
+        import time as _time
+        from evolve import settings_spec
+        from evolve.tuner import agent_space
+        from ..eval.harness import EvalHarness, load_suite
+
+        space = agent_space()
+        spec = settings_spec(space)
+        harness = EvalHarness(self.j)
+        suite = load_suite("core")
+        if task_ids is None:
+            task_ids = ["arithmetic_simple", "persona_intro", "conciseness"]
+        tasks = [t for t in suite.tasks if t.id in task_ids]
+        if not tasks:
+            return {"ok": False, "error": "no matching eval tasks"}
+
+        persona = self.j.config.persona
+        llm = self.j.config.llm
+        saved = {"formality": persona.formality, "humor": persona.humor,
+                 "verbosity": persona.verbosity, "temperature": llm.temperature,
+                 "top_p": llm.top_p, "num_predict": llm.num_predict}
+
+        def apply(g: dict[str, Any]) -> None:
+            persona.formality = float(g["persona_formality"])
+            persona.humor = float(g["persona_humor"])
+            persona.verbosity = float(g["persona_verbosity"])
+            llm.temperature = float(g["llm_temperature"])
+            llm.top_p = float(g["llm_top_p"])
+            llm.num_predict = int(g["llm_num_predict"])
+
+        def restore() -> None:
+            persona.formality = saved["formality"]
+            persona.humor = saved["humor"]
+            persona.verbosity = saved["verbosity"]
+            llm.temperature = saved["temperature"]
+            llm.top_p = saved["top_p"]
+            llm.num_predict = saved["num_predict"]
+
+        async def fitness(g: dict[str, Any]) -> float:
+            apply(g)
+            try:
+                total = 0.0
+                for t in tasks:
+                    report = await harness.run_task(t)
+                    total += report.score()
+                return -total / len(tasks)
+            except Exception:
+                return float("inf")
+
+        rng = _random.Random(0)
+        t0 = _time.perf_counter()
+        pop_size = int(population)
+        pop = [spec.random(rng) for _ in range(pop_size)]
+        fits = [await fitness(g) for g in pop]
+        best_g, best_f = min(zip(pop, fits), key=lambda x: x[1])
+        history = [{"generation": 0, "best": best_f, "mean": sum(fits) / len(fits)}]
+        ran = 0
+        try:
+            for gen in range(1, generations + 1):
+                ran = gen
+                if (_time.perf_counter() - t0) > max_seconds:
+                    break
+                ranked = sorted(zip(pop, fits), key=lambda x: x[1])
+                next_pop = [g for g, _ in ranked[:2]]  # elitism 2
+                while len(next_pop) < pop_size:
+                    p1 = ranked[rng.randrange(min(3, len(ranked)))][0]
+                    p2 = ranked[rng.randrange(min(3, len(ranked)))][0]
+                    c1, c2 = spec.crossover(p1, p2, rng)
+                    if rng.random() < 0.35:
+                        c1 = spec.mutate(c1, rng)
+                    if rng.random() < 0.35:
+                        c2 = spec.mutate(c2, rng)
+                    next_pop.append(c1)
+                    if len(next_pop) < pop_size:
+                        next_pop.append(c2)
+                pop = next_pop
+                fits = [await fitness(g) for g in pop]
+                nb_g, nb_f = min(zip(pop, fits), key=lambda x: x[1])
+                history.append({"generation": gen, "best": nb_f,
+                                "mean": sum(fits) / len(fits)})
+                if nb_f >= best_f:
+                    break  # stagnation — no improvement
+                best_g, best_f = nb_g, nb_f
+        finally:
+            restore()
+
+        report = {
+            "kind": "evolve.self",
+            "best_settings": best_g,
+            "best_score": round(-best_f, 4),
+            "tasks": [t.id for t in tasks],
+            "generations": ran,
+            "history": history,
+            "settings_restored": True,
+        }
+        if self.db is not None:
+            try:
+                self.db.kv_set(_LAST_KEY, report)
+                self.db.audit("evolve.self", actor="evolve", target="agent",
+                              detail={"best_score": report["best_score"],
+                                      "tasks": report["tasks"]})
+            except Exception as exc:  # pragma: no cover
+                log.warning("evolve.self record failed: %s", exc)
+        if self.bus is not None:
+            try:
+                self.bus.publish("evolve.completed", kind="evolve.self",
+                                 best_score=report["best_score"])
+            except Exception:  # pragma: no cover
+                pass
+        return report

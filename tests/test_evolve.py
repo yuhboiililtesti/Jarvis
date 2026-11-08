@@ -251,6 +251,44 @@ async def test_auto_service_and_tool(kernel):
     assert r.ok and r.data["experiments_run"] >= 1
 
 
+@pytest.mark.asyncio
+async def test_evolve_agent_evolves_settings_and_restores(kernel, monkeypatch):
+    class FakeReport:
+        def __init__(self, s):
+            self._s = s
+
+        def score(self):
+            return self._s
+
+    class FakeHarness:
+        """Deterministic fake: the optimum is formality 0.5."""
+
+        def __init__(self, j):
+            self.j = j
+
+        async def run_task(self, spec):
+            p = self.j.config.persona
+            return FakeReport(max(0.0, 1.0 - abs(p.formality - 0.5) * 2.0))
+
+    import jarvis.eval.harness as harness_mod
+    monkeypatch.setattr(harness_mod, "EvalHarness", FakeHarness)
+    svc = kernel.services["evolve"]
+    report = await svc.evolve_agent(generations=4, population=6)
+    # settings were restored afterwards
+    assert report["settings_restored"] is True
+    assert kernel.config.persona.formality == pytest.approx(0.85)
+    # the evolution found settings near the fake optimum (score >= 0.5)
+    assert report["best_score"] >= 0.5
+    assert report["best_settings"]["persona_formality"] == pytest.approx(0.5, abs=0.3)
+    assert set(report["tasks"]) == {"arithmetic_simple", "persona_intro", "conciseness"}
+
+
+def test_evolve_self_tool_registered(kernel):
+    from jarvis.tools import REGISTRY
+    assert "evolve.self" in REGISTRY.names()
+    assert "evolve.self" in kernel.config.policy.auto_allow
+
+
 # ------------------------------------------------------------- wiring -------
 
 def test_evolve_service_is_wired(kernel):

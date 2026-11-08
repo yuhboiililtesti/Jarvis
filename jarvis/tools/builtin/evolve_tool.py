@@ -252,3 +252,35 @@ class EvolveAutoTool(BaseTool):
             return _missing()
         report = await svc.auto_run(minutes=float(kwargs.get("minutes", 5)))
         return ToolResult(ok=True, data=report)
+
+
+@register(["evolve.self", "evolve.evolve_agent"])
+class EvolveSelfTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.self",
+        summary="Evolve the agent's own settings (persona + LLM knobs) against its held-out eval score.",
+        category="evolve",
+        side_effect=SideEffect.NONE,   # measurement; original settings are restored after
+        params=(
+            ToolParam("generations", "integer", "Evolution generations.", default=4),
+            ToolParam("population", "integer", "Population size.", default=6),
+        ),
+        returns="object with the best settings, their eval score, and the tasks used",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        report = await svc.evolve_agent(
+            generations=int(kwargs.get("generations", 4)),
+            population=int(kwargs.get("population", 6)))
+        if "ok" in report and report["ok"] is False:
+            return ToolResult(ok=False, error=report["error"])
+        return ToolResult(ok=True, data={
+            "best_settings": report["best_settings"],
+            "best_eval_score": report["best_score"],
+            "tasks": report["tasks"],
+            "generations": report["generations"],
+            "settings_restored": report["settings_restored"],
+        })
