@@ -284,3 +284,146 @@ class EvolveSelfTool(BaseTool):
             "generations": report["generations"],
             "settings_restored": report["settings_restored"],
         })
+
+
+@register(["evolve.train"])
+class EvolveTrainTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.train",
+        summary="Start a neural-policy training job (DQN/PPO); returns a task id immediately.",
+        category="evolve",
+        side_effect=SideEffect.NONE,   # computation; the job runs in the background
+        params=(
+            ToolParam("env", "string", "Gymnasium environment.", default="CartPole-v1",
+                      enum=("CartPole-v1", "Acrobot-v1", "MountainCar-v0")),
+            ToolParam("algorithm", "string", "Algorithm.", default="dqn",
+                      enum=("dqn", "ppo")),
+            ToolParam("steps", "integer", "Training steps.", default=30000),
+        ),
+        returns="object with the task id (poll evolve.get_status)",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        res = await svc.train(env=str(kwargs.get("env", "CartPole-v1")),
+                              algorithm=str(kwargs.get("algorithm", "dqn")),
+                              steps=int(kwargs.get("steps", 30000)))
+        if "ok" in res and res["ok"] is False:
+            return ToolResult(ok=False, error=res["error"])
+        return ToolResult(ok=True, data=res)
+
+
+@register(["evolve.get_status", "evolve.task"])
+class EvolveTaskStatusTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.get_status",
+        summary="Check a training job's status and result by task id.",
+        category="evolve",
+        side_effect=SideEffect.NONE,
+        params=(ToolParam("task_id", "string", "Task id from evolve.train.", required=True),),
+        returns="object with status and (when done) the result",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        res = await svc.get_status(str(kwargs.get("task_id")))
+        return ToolResult(ok=res.get("ok", False), data=res,
+                          error=None if res.get("ok") else res.get("error"))
+
+
+@register(["evolve.cancel"])
+class EvolveCancelTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.cancel",
+        summary="Cancel a running training job by task id.",
+        category="evolve",
+        side_effect=SideEffect.NONE,
+        params=(ToolParam("task_id", "string", "Task id to cancel.", required=True),),
+        returns="object with the cancellation result",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        res = await svc.cancel(str(kwargs.get("task_id")))
+        return ToolResult(ok=res.get("ok", False), data=res,
+                          error=None if res.get("ok") else res.get("error"))
+
+
+@register(["evolve.list_models"])
+class EvolveListModelsTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.list_models",
+        summary="List trained policy checkpoints with their ids and metadata.",
+        category="evolve",
+        side_effect=SideEffect.NONE,
+        params=(),
+        returns="array of model records",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        return ToolResult(ok=True, data={"models": svc.list_models()})
+
+
+@register(["evolve.evaluate_model", "evolve.eval_model"])
+class EvolveEvaluateModelTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.evaluate_model",
+        summary="Independently evaluate a trained policy checkpoint by model id.",
+        category="evolve",
+        side_effect=SideEffect.NONE,
+        params=(
+            ToolParam("model_id", "integer", "Model id from evolve.list_models.", required=True),
+            ToolParam("benchmark", "string", "Environment to evaluate on.", default="CartPole-v1",
+                      enum=("CartPole-v1", "Acrobot-v1", "MountainCar-v0")),
+            ToolParam("episodes", "integer", "Evaluation episodes.", default=10),
+        ),
+        returns="object with the independent mean reward",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        res = await svc.evaluate_model(int(kwargs.get("model_id")),
+                                       benchmark=str(kwargs.get("benchmark", "CartPole-v1")),
+                                       episodes=int(kwargs.get("episodes", 10)))
+        return ToolResult(ok=res.get("ok", False), data=res,
+                          error=None if res.get("ok") else res.get("error"))
+
+
+@register(["evolve.compare"])
+class EvolveCompareTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.compare",
+        summary="Run a controlled PPO-vs-DQN comparison (matched steps + seeds).",
+        category="evolve",
+        side_effect=SideEffect.NONE,
+        params=(
+            ToolParam("envs", "array", "Environments to compare on.", default=None),
+            ToolParam("steps", "integer", "Step budget per run.", default=8000),
+            ToolParam("seeds", "integer", "Seeds per algorithm.", default=3),
+        ),
+        returns="object with per-algorithm summary statistics",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        envs = kwargs.get("envs")
+        res = await svc.compare(envs=list(envs) if envs else None,
+                                steps=int(kwargs.get("steps", 8000)),
+                                seeds=int(kwargs.get("seeds", 3)))
+        if "ok" in res and res["ok"] is False:
+            return ToolResult(ok=False, error=res["error"])
+        return ToolResult(ok=True, data={"config": res["config"],
+                                         "summary": res["summary"]})

@@ -13,8 +13,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+from pathlib import Path
 from typing import Any
 
+from ..ids import new_id
 from ..logging_setup import get_logger
 from evolve.engine import EvolutionEngine, RunConfig, RunResult
 from evolve.genome import expression_spec, numeric_spec
@@ -37,6 +40,8 @@ class EvolveService:
         self.j = jarvis
         self.db = getattr(jarvis, "db", None)
         self.bus = getattr(jarvis, "bus", None)
+        self._tasks: dict[str, dict[str, Any]] = {}
+        self._mem: tuple[Any, Any, Any] | None = None
 
     # -- helpers ----------------------------------------------------------
     def _record(self, result: RunResult, kind: str) -> dict[str, Any]:
@@ -321,3 +326,127 @@ class EvolveService:
             except Exception:  # pragma: no cover
                 pass
         return report
+
+    # -- Phase C: task-based learning interface (JARVIS is a client) -----
+    def _memory(self) -> tuple[Any, Any, Any]:
+        """Lazily build the durable memory (SQLite + artifacts + model registry)."""
+        if self._mem is None:
+            from evolve.memory import MemoryStore, ArtifactStore, ModelRegistry
+            data_dir = Path(self.j.config.data_path)
+            data_dir.mkdir(parents=True, exist_ok=True)
+            store = MemoryStore(str(data_dir / "evolve-memory.db"))
+            artifacts = ArtifactStore(str(data_dir / "evolve-artifacts"))
+            self._mem = (store, artifacts, ModelRegistry(store, artifacts))
+        return self._mem
+
+    async def train(self, *, env: str = "CartPole-v1",
+                    algorithm: str = "dqn", steps: int = 30000) -> dict[str, Any]:
+        """Start a training job; returns a task id immediately."""
+        try:
+            from evolve.learn import DQN, PPO, env_shapes, train as _train
+        except ImportError:
+            return {"ok": False,
+                    "error": "learning engine requires torch + gymnasium on this host"}
+        task_id = new_id("evt")
+        cancel = threading.Event()
+        self._tasks[task_id] = {"kind": "train", "env": env, "algorithm": algorithm,
+                                "status": "running", "cancel": cancel, "result": None}
+
+        def work() -> None:
+            try:
+                obs_dim, act_dim = env_shapes(env)
+                agent = (DQN(obs_dim, act_dim) if algorithm == "dqn"
+                         else PPO(obs_dim, act_dim))
+                result = _train(agent, env, steps, algorithm=algorithm,
+                                eval_interval=max(2000, steps // 10),
+                                eval_episodes=5, eval_seed=100,
+                                max_seconds=1800.0, should_stop=cancel.is_set)
+                rec = None
+                if not cancel.is_set():
+                    _, _, registry = self._memory()
+                    rec = registry.save_model(
+                        agent, name=task_id,
+                        meta={"env": env, "algorithm": algorithm})
+                self._tasks[task_id]["status"] = ("cancelled" if cancel.is_set()
+                                                  else "done")
+                self._tasks[task_id]["result"] = {
+                    "result": result.to_dict(),
+                    "model_id": rec["model_id"] if rec else None}
+                self._publish_learn("train.done", task_id,
+                                    final=result.final_eval_mean)
+            except Exception as exc:  # pragma: no cover
+                self._tasks[task_id]["status"] = "failed"
+                self._tasks[task_id]["result"] = {
+                    "error": f"{type(exc).__name__}: {exc}"}
+
+        threading.Thread(target=work, daemon=True).start()
+        return {"ok": True, "task_id": task_id, "status": "running"}
+
+    def _publish_learn(self, topic: str, task_id: str, **data: Any) -> None:
+        if self.bus is not None:
+            try:
+                self.bus.publish(f"evolve.{topic}", task_id=task_id, **data)
+            except Exception:  # pragma: no cover
+                pass
+
+    async def get_status(self, task_id: str) -> dict[str, Any]:
+        t = self._tasks.get(task_id)
+        if t is None:
+            return {"ok": False, "error": f"unknown task {task_id}"}
+        return {"ok": True, "task_id": task_id, "kind": t.get("kind"),
+                "status": t["status"], "result": t.get("result")}
+
+    async def cancel(self, task_id: str) -> dict[str, Any]:
+        t = self._tasks.get(task_id)
+        if t is None:
+            return {"ok": False, "error": f"unknown task {task_id}"}
+        if t["status"] != "running":
+            return {"ok": True, "task_id": task_id, "status": t["status"],
+                    "cancelled": False}
+        t["cancel"].set()
+        return {"ok": True, "task_id": task_id, "cancelled": True}
+
+    def list_models(self) -> list[dict[str, Any]]:
+        try:
+            _, _, registry = self._memory()
+            return registry.list()
+        except Exception as exc:  # pragma: no cover
+            return [{"error": str(exc)}]
+
+    async def evaluate_model(self, model_id: int, *,
+                             benchmark: str = "CartPole-v1",
+                             episodes: int = 10) -> dict[str, Any]:
+        try:
+            from evolve.learn import DQN, PPO, env_shapes, evaluate
+        except ImportError:
+            return {"ok": False,
+                    "error": "learning engine requires torch + gymnasium on this host"}
+        _, _, registry = self._memory()
+        rec = registry.get(model_id)
+        if rec is None:
+            return {"ok": False, "error": f"no model {model_id}"}
+        meta = json.loads(rec["meta"])
+        obs_dim, act_dim = env_shapes(benchmark)
+
+        def factory():
+            return (DQN(obs_dim, act_dim) if meta.get("algorithm") == "dqn"
+                    else PPO(obs_dim, act_dim))
+
+        agent = registry.load_agent(model_id, factory)
+        mean = evaluate(agent, benchmark, episodes, seed=200)
+        return {"ok": True, "model_id": model_id, "benchmark": benchmark,
+                "mean_reward": round(mean, 2), "episodes": episodes}
+
+    async def compare(self, *, envs: list[str] | None = None,
+                      steps: int = 8000, seeds: int = 3) -> dict[str, Any]:
+        try:
+            from evolve.learn import compare_algorithms
+        except ImportError:
+            return {"ok": False,
+                    "error": "learning engine requires torch + gymnasium on this host"}
+        env_names = tuple(envs) if envs else None
+
+        def work() -> dict[str, Any]:
+            return compare_algorithms(envs=env_names, steps=steps, seeds=seeds)
+
+        return await asyncio.to_thread(work)

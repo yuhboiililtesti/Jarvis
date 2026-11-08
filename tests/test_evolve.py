@@ -290,6 +290,56 @@ def test_evolve_self_tool_registered(kernel):
     assert "evolve.self" in kernel.config.policy.auto_allow
 
 
+# ------------------------------------------------- Phase C: task interface ---
+
+def test_phase_c_tools_registered(kernel):
+    from jarvis.tools import REGISTRY
+    for name in ("evolve.train", "evolve.get_status", "evolve.cancel",
+                 "evolve.list_models", "evolve.evaluate_model", "evolve.compare"):
+        assert name in REGISTRY.names()
+        assert name in kernel.config.policy.auto_allow
+
+
+@pytest.mark.asyncio
+async def test_evolve_train_task_lifecycle(kernel):
+    import asyncio
+    pytest.importorskip("torch")
+    svc = kernel.services["evolve"]
+    res = await svc.train(env="CartPole-v1", algorithm="dqn", steps=1500)
+    assert res.get("ok") and res.get("task_id")
+    status = {"status": "running"}
+    for _ in range(120):
+        status = await svc.get_status(res["task_id"])
+        if status["status"] != "running":
+            break
+        await asyncio.sleep(0.25)
+    assert status["status"] in ("done", "cancelled", "failed")
+    if status["status"] == "done":
+        model_id = status["result"]["model_id"]
+        assert model_id is not None
+        assert any(m["id"] == model_id for m in svc.list_models())
+        ev = await svc.evaluate_model(model_id, episodes=3)
+        assert ev["ok"] and ev["mean_reward"] is not None
+
+
+@pytest.mark.asyncio
+async def test_evolve_train_cancel(kernel):
+    import asyncio
+    pytest.importorskip("torch")
+    svc = kernel.services["evolve"]
+    res = await svc.train(env="CartPole-v1", algorithm="ppo", steps=100000)
+    assert res.get("ok")
+    cancelled = await svc.cancel(res["task_id"])
+    assert cancelled["cancelled"] is True
+    # status settles to cancelled (bounded poll)
+    for _ in range(60):
+        status = await svc.get_status(res["task_id"])
+        if status["status"] != "running":
+            break
+        await asyncio.sleep(0.25)
+    assert status["status"] == "cancelled"
+
+
 # ------------------------------------------------- hardware awareness ---------
 
 def test_hardware_detect_and_tiers():

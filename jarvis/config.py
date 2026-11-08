@@ -167,6 +167,8 @@ class PolicyConfig:
             "vision.ocr", "vision.screen",
             "evolve.symbolic", "evolve.minimize", "evolve.selftune", "evolve.status",
             "evolve.tune", "evolve.auto", "evolve.self",
+            "evolve.train", "evolve.get_status", "evolve.cancel",
+            "evolve.list_models", "evolve.evaluate_model", "evolve.compare",
         ]
     )
     approval_timeout_s: float = 300.0
