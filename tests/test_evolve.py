@@ -330,7 +330,7 @@ def test_c_code_benchmark_compiles_and_times():
     fitness = code_benchmark_fitness(C_SUM_SOURCE, compiler=cc, runs=1)
     # -O3 is at least as fast as -O0 on this fixed workload
     fast = fitness({"opt": 3, "march": "native"})
-    slow = fitness({"opt": 0, "march": "generic"})
+    slow = fitness({"opt": 0, "march": "x86-64"})
     assert fast <= slow
     # the tuner converges to -O3
     tuner = SystemTuner(c_flags_space(), fitness, name="c-flags")
