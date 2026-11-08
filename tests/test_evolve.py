@@ -257,6 +257,7 @@ async def test_evolve_agent_evolves_settings_and_restores(kernel, monkeypatch):
         def __init__(self, s):
             self._s = s
 
+        @property
         def score(self):
             return self._s
 

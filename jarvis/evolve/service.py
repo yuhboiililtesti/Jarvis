@@ -255,7 +255,7 @@ class EvolveService:
                 total = 0.0
                 for t in tasks:
                     report = await harness.run_task(t)
-                    total += report.score()
+                    total += report.score  # TaskReport.score is a property
                 return -total / len(tasks)
             except Exception:
                 return float("inf")
