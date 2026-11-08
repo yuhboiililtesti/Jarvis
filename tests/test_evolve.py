@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from jarvis.evolve import (EvolutionEngine, RunConfig, evaluate_expression,
-                           expression_str, expression_spec, minimize, numeric_spec,
-                           rastrigin, self_tune, sphere, symbolic_regression)
+from jarvis.evolve import (EvolutionEngine, RunConfig, ackley, evaluate_expression,
+                           expression_str, expression_spec, griewank, minimize,
+                           numeric_spec, rastrigin, rosenbrock, self_tune, sphere,
+                           symbolic_regression)
 
 
 # ------------------------------------------------------------- expression ----
@@ -89,6 +90,51 @@ def test_self_tune_returns_a_config():
     assert isinstance(cfg, dict)
     assert "population_size" in cfg and "selection" in cfg and "mutation_rate" in cfg
     assert res.best.fitness != float("inf")
+
+
+# -------------------------------------------------------- progress hook -------
+
+def test_on_generation_callback_fires():
+    from jarvis.evolve import RunConfig, EvolutionEngine
+    spec = numeric_spec([(-5.0, 5.0)] * 2)
+    seen = []
+
+    def hook(gen, stats):
+        seen.append((gen, stats["best"]))
+
+    cfg = RunConfig(population_size=20, generations=8, seed=0, on_generation=hook)
+    EvolutionEngine(spec, minimize(sphere), cfg).run()
+    # one call per generation (0..N), monotonic-ish best
+    assert len(seen) == 9
+    assert seen[-1][1] <= seen[0][1]
+
+
+# -------------------------------------------------------- new benchmarks ------
+
+def test_new_benchmark_minima():
+    assert ackley([0.0, 0.0, 0.0]) == pytest.approx(0.0, abs=1e-12)
+    assert rosenbrock([1.0, 1.0, 1.0]) == pytest.approx(0.0, abs=1e-12)
+    assert griewank([0.0, 0.0, 0.0]) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_minimize_ackley_improves():
+    spec = numeric_spec([(-32.768, 32.768)] * 3)
+    cfg = RunConfig(population_size=60, generations=50, mutation_rate=0.3,
+                    crossover_rate=0.8, elitism=2, seed=2)
+    res = EvolutionEngine(spec, minimize(ackley), cfg).run()
+    assert res.best.fitness < 2.0
+
+
+# ------------------------------------------------------------- auto runner ----
+
+def test_auto_runner_produces_report():
+    from jarvis.evolve import auto_run
+    events = []
+    report = auto_run(minutes=2.0, on_progress=events.append)
+    assert report["experiments_run"] >= 1
+    assert report["rows"]
+    assert any(r["experiment"].startswith("minimize-") for r in report["rows"])
+    assert any(e["kind"] == "experiment_done" for e in events)
 
 
 # ------------------------------------------------------------- wiring -------

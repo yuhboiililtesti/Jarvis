@@ -55,6 +55,9 @@ class RunConfig:
     seed: int = 0
     max_seconds: float = 60.0
     stagnation_generations: int = 15  # stop if no improvement for this many gens
+    # Optional progress hook: called once per generation with
+    # (generation, stats_dict). Enables live charts / progress reporting.
+    on_generation: Any = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -164,7 +167,13 @@ class EvolutionEngine:
 
         for gen in range(1, cfg.generations + 1):
             ran_generations = gen
-            history.append(_stats(gen - 1))
+            stats = _stats(gen - 1)
+            history.append(stats)
+            if cfg.on_generation is not None:
+                try:
+                    cfg.on_generation(gen - 1, stats)
+                except Exception:  # pragma: no cover - a progress hook must not break the run
+                    pass
 
             # Elitism: carry the top survivors forward unchanged.
             ranked = sorted(population, key=lambda i: i.fitness)
@@ -197,7 +206,13 @@ class EvolutionEngine:
             if stagnant >= cfg.stagnation_generations:
                 break
 
-        history.append(_stats(ran_generations))
+        final_stats = _stats(ran_generations)
+        history.append(final_stats)
+        if cfg.on_generation is not None:
+            try:
+                cfg.on_generation(ran_generations, final_stats)
+            except Exception:  # pragma: no cover - a progress hook must not break the run
+                pass
         return RunResult(
             best=best, config=cfg.to_dict(), history=history,
             converged=(stagnant >= cfg.stagnation_generations),

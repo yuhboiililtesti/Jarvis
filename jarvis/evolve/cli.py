@@ -19,11 +19,13 @@ from typing import Any
 from .engine import EvolutionEngine, RunConfig
 from .genome import expression_spec, expression_str, numeric_spec
 from .meta import self_tune
-from .objectives import maximize, minimize, rastrigin, sphere, symbolic_regression
+from .objectives import (ackley, griewank, maximize, minimize, rastrigin,
+                         rosenbrock, sphere, symbolic_regression)
 
 __all__ = ["cli_main", "demo"]
 
-_BENCHMARKS = {"sphere": sphere, "rastrigin": rastrigin}
+_BENCHMARKS = {"sphere": sphere, "rastrigin": rastrigin, "ackley": ackley,
+               "rosenbrock": rosenbrock, "griewank": griewank}
 
 
 def _numbers(text: str) -> list[float]:
@@ -127,6 +129,10 @@ def cli_main(argv: list[str] | None = None) -> int:
     p.add_argument("--task", default="sphere", choices=sorted(_BENCHMARKS))
     p.add_argument("--meta-generations", type=int, default=10)
 
+    p = sub.add_parser("auto", help="run the automatic experiment queue (bounded)")
+    p.add_argument("--minutes", type=float, default=10.0)
+    p.add_argument("--report", default=None, help="path to write the JSON report")
+
     sub.add_parser("demo", help="run all demonstrations")
     sub.add_parser("gui", help="launch the desktop GUI")
 
@@ -143,6 +149,9 @@ def cli_main(argv: list[str] | None = None) -> int:
                       args.population, args.seed)
     elif args.cmd == "selftune":
         _run_selftune(args.task, args.meta_generations)
+    elif args.cmd == "auto":
+        from .auto import auto_run, _print_report
+        _print_report(auto_run(args.minutes, args.report))
     elif args.cmd == "demo":
         demo()
     elif args.cmd == "gui":

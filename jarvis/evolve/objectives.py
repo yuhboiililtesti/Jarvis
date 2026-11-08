@@ -15,7 +15,8 @@ from typing import Any, Callable, Sequence
 
 from .genome import evaluate_expression, tree_size
 
-__all__ = ["symbolic_regression", "minimize", "maximize", "sphere", "rastrigin"]
+__all__ = ["symbolic_regression", "minimize", "maximize", "sphere", "rastrigin",
+           "ackley", "rosenbrock", "griewank"]
 
 Fitness = Callable[[Any], float]
 
@@ -73,3 +74,28 @@ def rastrigin(x: Sequence[float]) -> float:
     n = len(x)
     return 10.0 * n + sum(float(v) ** 2 - 10.0 * math.cos(2.0 * math.pi * float(v))
                           for v in x)
+
+
+def ackley(x: Sequence[float]) -> float:
+    """Multimodal; global min 0 at the origin. Typical domain ±32.768."""
+    n = len(x)
+    s1 = sum(float(v) ** 2 for v in x) / n
+    s2 = sum(math.cos(2.0 * math.pi * float(v)) for v in x) / n
+    return (-20.0 * math.exp(-0.2 * math.sqrt(s1)) - math.exp(s2)
+            + 20.0 + math.e)
+
+
+def rosenbrock(x: Sequence[float]) -> float:
+    """Valley-shaped; global min 0 at all-ones. Typical domain [-5, 10]."""
+    return sum(100.0 * (float(x[i + 1]) - float(x[i]) ** 2) ** 2
+               + (1.0 - float(x[i])) ** 2 for i in range(len(x) - 1))
+
+
+def griewank(x: Sequence[float]) -> float:
+    """Many local minima; global min 0 at the origin. Typical domain ±600."""
+    n = len(x)
+    s = sum(float(v) ** 2 for v in x) / 4000.0
+    p = 1.0
+    for i, v in enumerate(x):
+        p *= math.cos(float(v) / math.sqrt(i + 1))
+    return 1.0 + s - p

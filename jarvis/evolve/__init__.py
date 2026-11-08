@@ -9,7 +9,9 @@ from .engine import EvolutionEngine, Individual, RunConfig, RunResult
 from .genome import (GenomeSpec, evaluate_expression, expression_spec,
                      expression_str, numeric_spec)
 from .meta import CONFIG_SPACE, config_spec, self_tune
-from .objectives import maximize, minimize, rastrigin, sphere, symbolic_regression
+from .objectives import (ackley, griewank, maximize, minimize, rastrigin,
+                         rosenbrock, sphere, symbolic_regression)
+from .auto import AutoRunner, auto_run
 from .service import EvolveService
 
 __all__ = [
@@ -18,5 +20,7 @@ __all__ = [
     "expression_str",
     "CONFIG_SPACE", "config_spec", "self_tune",
     "symbolic_regression", "minimize", "maximize", "sphere", "rastrigin",
+    "ackley", "rosenbrock", "griewank",
+    "AutoRunner", "auto_run",
     "EvolveService",
 ]
