@@ -232,6 +232,7 @@ def _try_build_optional(j: Jarvis) -> dict[str, Any]:
         "compute_scheduler": ("jarvis.scheduler", "ComputeScheduler"),
         "guardian": ("jarvis.guardian", "GuardianService"),
         "backup": ("jarvis.backup", "BackupController"),
+        "evolve": ("jarvis.evolve", "EvolveService"),
     }
     for key, (module, cls) in builders.items():
         try:
