@@ -290,6 +290,54 @@ def test_evolve_self_tool_registered(kernel):
     assert "evolve.self" in kernel.config.policy.auto_allow
 
 
+# ------------------------------------------------- hardware awareness ---------
+
+def test_hardware_detect_and_tiers():
+    from jarvis.evolve import detect, tier_of, recommended_workers, recommended_defaults
+    prof = detect()
+    assert prof.cpu_cores >= 1 and prof.ram_gb > 0
+    assert prof.tier in ("constrained", "moderate", "capable", "high_end")
+    assert tier_of(2, 3.0) == "constrained"
+    assert tier_of(4, 8.0) == "moderate"
+    assert tier_of(8, 16.0) == "capable"
+    assert tier_of(16, 64.0, vram_gb=16) == "high_end"
+    # workers are conservative: never more than half the cores
+    assert recommended_workers(prof) <= max(1, prof.cpu_cores // 2)
+    defaults = recommended_defaults(prof)
+    assert defaults["parallel"] >= 1 and defaults["population"] >= 1
+
+
+def test_parallel_engine_matches_serial():
+    from jarvis.evolve import EvolutionEngine, RunConfig, numeric_spec, minimize, sphere
+    spec = numeric_spec([(-5.0, 5.0)] * 3)
+    fitness = minimize(sphere)
+    base = RunConfig(population_size=30, generations=20, seed=42)
+    serial = EvolutionEngine(spec, fitness, base).run()
+    parallel = EvolutionEngine(spec, fitness,
+                               RunConfig(population_size=30, generations=20,
+                                         seed=42, parallel=4)).run()
+    # parallel evaluation must not change the evolved result
+    assert serial.best.fitness == parallel.best.fitness
+
+
+def test_c_code_benchmark_compiles_and_times():
+    import pytest
+    from jarvis.evolve import (C_SUM_SOURCE, c_flags_space, code_benchmark_fitness,
+                               compiler_available, SystemTuner)
+    cc = "cc"
+    if not compiler_available(cc):
+        pytest.skip("no C compiler on PATH")
+    fitness = code_benchmark_fitness(C_SUM_SOURCE, compiler=cc, runs=1)
+    # -O3 is at least as fast as -O0 on this fixed workload
+    fast = fitness({"opt": 3, "march": "native"})
+    slow = fitness({"opt": 0, "march": "generic"})
+    assert fast <= slow
+    # the tuner converges to -O3
+    tuner = SystemTuner(c_flags_space(), fitness, name="c-flags")
+    res = tuner.tune(generations=6, population=6, seed=0)
+    assert res.best.genome["opt"] >= 2
+
+
 # ------------------------------------------------------------- wiring -------
 
 def test_evolve_service_is_wired(kernel):
