@@ -165,6 +165,7 @@ class PolicyConfig:
             "discovery.scan", "monitoring.status", "sandbox.status",
             "anton.status", "anton.jobs", "anton.nodes", "anton.routines",
             "vision.ocr", "vision.screen",
+            "evolve.symbolic", "evolve.minimize", "evolve.selftune", "evolve.status",
         ]
     )
     approval_timeout_s: float = 300.0

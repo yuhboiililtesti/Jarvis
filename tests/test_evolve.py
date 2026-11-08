@@ -104,6 +104,13 @@ def test_evolve_tools_registered(kernel):
         assert n in names
 
 
+def test_evolve_tools_auto_allowed(cfg):
+    # Evolve tools are read-only computation (SideEffect.NONE) and must be
+    # callable by the agent without an approval prompt.
+    for n in ("evolve.symbolic", "evolve.minimize", "evolve.selftune", "evolve.status"):
+        assert n in cfg.policy.auto_allow
+
+
 @pytest.mark.asyncio
 async def test_evolve_service_minimize(kernel):
     svc = kernel.services["evolve"]
