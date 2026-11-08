@@ -1,6 +1,6 @@
-"""Allow ``python -m jarvis.evolve`` to run the CLI."""
+"""Allow ``python -m jarvis.evolve`` to delegate to the standalone CLI."""
 
-from .cli import cli_main
+from evolve.cli import cli_main
 
 if __name__ == "__main__":
     raise SystemExit(cli_main())

@@ -65,7 +65,7 @@ class EvolveSymbolicTool(BaseTool):
         if "ok" in res and res["ok"] is False:
             return ToolResult(ok=False, error=res["error"])
         best = res["result"]["best"]
-        from ..evolve.genome import expression_str
+        from ..evolve import expression_str
         return ToolResult(ok=True, data={
             "expression": expression_str(best["genome"]),
             "mean_squared_error": best["fitness"],
@@ -231,3 +231,24 @@ class EvolveTuneCommandTool(BaseTool):
             "mean_seconds": best["fitness"],
             "generations": res["result"]["generations_run"],
         })
+
+
+@register(["evolve.auto"])
+class EvolveAutoTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.auto",
+        summary="Run the bounded automatic EVOLVE experiment queue and return its report.",
+        category="evolve",
+        side_effect=SideEffect.NONE,   # pure computation, bounded by a time budget
+        params=(
+            ToolParam("minutes", "integer", "Time budget in minutes.", default=5),
+        ),
+        returns="object with the experiment report",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        report = await svc.auto_run(minutes=float(kwargs.get("minutes", 5)))
+        return ToolResult(ok=True, data=report)

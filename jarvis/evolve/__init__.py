@@ -1,34 +1,12 @@
-"""EVOLVE — an evolutionary intelligence engine JARVIS can run and evolve.
+"""JARVIS shim over the standalone ``evolve`` package.
 
-A self-contained, deterministic evolutionary optimizer: it evolves numeric
-vectors, symbolic expression trees, and (via meta-evolution) its own search
-configuration. See :mod:`jarvis.evolve.engine` for the core loop.
+The evolutionary engine lives in its own project (``C:\\Users\\Topaz\\Projects\\Evolve``,
+installed editable). This module re-exports the whole core so existing JARVIS
+code and tools keep working unchanged, and adds the JARVIS-specific service.
 """
 
-from .engine import EvolutionEngine, Individual, RunConfig, RunResult
-from .genome import (GenomeSpec, evaluate_expression, expression_spec,
-                     expression_str, numeric_spec)
-from .meta import CONFIG_SPACE, config_spec, self_tune
-from .objectives import (ackley, griewank, maximize, minimize, rastrigin,
-                         rosenbrock, sphere, symbolic_regression)
-from .settings import Field, SettingsSpace, settings_spec
-from .measure import command_benchmark, ollama_latency, process_memory, tcp_latency
-from .tuner import (SystemTuner, ollama_space, minecraft_space, gzip_space,
-                    build_jobs_space)
-from .auto import AutoRunner, auto_run
+from evolve import *  # noqa: F401,F403 — re-export the core platform
+from evolve import __all__ as _evolve_all
 from .service import EvolveService
 
-__all__ = [
-    "EvolutionEngine", "Individual", "RunConfig", "RunResult",
-    "GenomeSpec", "numeric_spec", "expression_spec", "evaluate_expression",
-    "expression_str",
-    "CONFIG_SPACE", "config_spec", "self_tune",
-    "symbolic_regression", "minimize", "maximize", "sphere", "rastrigin",
-    "ackley", "rosenbrock", "griewank",
-    "Field", "SettingsSpace", "settings_spec",
-    "command_benchmark", "ollama_latency", "process_memory", "tcp_latency",
-    "SystemTuner", "ollama_space", "minecraft_space", "gzip_space",
-    "build_jobs_space",
-    "AutoRunner", "auto_run",
-    "EvolveService",
-]
+__all__ = list(_evolve_all) + ["EvolveService"]

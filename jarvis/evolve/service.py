@@ -16,10 +16,10 @@ import json
 from typing import Any
 
 from ..logging_setup import get_logger
-from .engine import EvolutionEngine, RunConfig, RunResult
-from .genome import expression_spec, numeric_spec
-from .meta import self_tune
-from .objectives import rastrigin, sphere, symbolic_regression
+from evolve.engine import EvolutionEngine, RunConfig, RunResult
+from evolve.genome import expression_spec, numeric_spec
+from evolve.meta import self_tune
+from evolve.objectives import rastrigin, sphere, symbolic_regression
 
 log = get_logger("jarvis.evolve")
 
@@ -138,8 +138,8 @@ class EvolveService:
         Expensive: every candidate is a real model call, so budgets are small
         by design. Read-only (measurement only; nothing is written).
         """
-        from .measure import ollama_latency
-        from .tuner import SystemTuner, ollama_space
+        from evolve.measure import ollama_latency
+        from evolve.tuner import SystemTuner, ollama_space
         llm = getattr(getattr(self.j, "config", None), "llm", None)
         if llm is None:
             return {"ok": False, "error": "no llm config"}
@@ -157,9 +157,9 @@ class EvolveService:
                            runs: int = 2, generations: int = 15) -> dict[str, Any]:
         """Evolve one integer parameter (``{level}``) of a shell command by
         measuring its wall time. Runs the command repeatedly — bounded."""
-        from .measure import command_benchmark
-        from .settings import Field, SettingsSpace
-        from .tuner import SystemTuner
+        from evolve.measure import command_benchmark
+        from evolve.settings import Field, SettingsSpace
+        from evolve.tuner import SystemTuner
         if "{level}" not in template:
             return {"ok": False, "error": "template must contain a {level} placeholder"}
         if not 1 <= low < high <= 10000:
@@ -174,3 +174,27 @@ class EvolveService:
 
         result = await asyncio.to_thread(_run)
         return self._record(result, "tune:command")
+
+    async def auto_run(self, minutes: float = 5.0) -> dict[str, Any]:
+        """Run the bounded automatic experiment queue and return its report."""
+        from evolve.auto import auto_run as _auto
+
+        def _run() -> dict[str, Any]:
+            return _auto(minutes=minutes)
+
+        report = await asyncio.to_thread(_run)
+        if self.db is not None:
+            try:
+                self.db.kv_set(_LAST_KEY, {"kind": "auto", "report": report})
+                self.db.audit("evolve.auto", actor="evolve", target="auto",
+                              detail={"experiments": report.get("experiments_run"),
+                                      "wall_seconds": report.get("wall_seconds")})
+            except Exception as exc:  # pragma: no cover
+                log.warning("evolve auto record failed: %s", exc)
+        if self.bus is not None:
+            try:
+                self.bus.publish("evolve.completed", kind="auto",
+                                 experiments=report.get("experiments_run"))
+            except Exception as exc:  # pragma: no cover
+                log.debug("evolve bus publish failed: %s", exc)
+        return report

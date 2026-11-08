@@ -163,10 +163,10 @@ def test_settings_space_sampling_and_mutation():
 def test_command_benchmark_measures_wall_time():
     from jarvis.evolve import command_benchmark
     fitness = command_benchmark(
-        'python -c "import time; time.sleep(0.02 * {level})"', runs=1, warmup=0)
+        'python -c "import time; time.sleep(0.1 * {level})"', runs=1, warmup=0)
     fast = fitness({"level": 1})
-    slow = fitness({"level": 5})
-    assert fast < slow  # real wall-clock scaling
+    slow = fitness({"level": 4})
+    assert fast < slow  # real wall-clock scaling (0.1s vs 0.4s)
 
 
 def test_system_tuner_finds_fastest_command_parameter():
@@ -204,6 +204,51 @@ async def test_tune_command_service_and_tool(kernel):
         low=1, high=9, runs=1, generations=10)
     assert res["kind"] == "tune:command"
     assert res["result"]["best"]["genome"]["level"] <= 2
+
+
+# ------------------------------------------------- server targets & apply -----
+
+def test_new_target_spaces_sample_legally():
+    import random
+    from jarvis.evolve import (stresstest_space, nginx_space, postgres_space,
+                               jvm_space, settings_spec)
+    rng = random.Random(1)
+    for space in (stresstest_space(), nginx_space(), postgres_space(), jvm_space()):
+        g = settings_spec(space).random(rng)
+        for key, f in space.fields.items():
+            assert key in g
+            if f.kind == "int":
+                assert f.low <= g[key] <= f.high
+            elif f.kind == "choice":
+                assert g[key] in f.choices
+
+
+def test_minecraft_apply_backs_up_and_writes(tmp_path):
+    from jarvis.evolve import minecraft_apply, minecraft_space
+    props = tmp_path / "server.properties"
+    props.write_text("view-distance=10\nsimulation-distance=8\nmotd=A Minecraft Server\n")
+    apply = minecraft_apply(str(props))
+    apply({"view-distance": 12, "simulation-distance": 6, "max-players": 30})
+    text = props.read_text()
+    assert "view-distance=12" in text
+    assert "simulation-distance=6" in text
+    assert "max-players=30" in text
+    assert "motd=A Minecraft Server" in text        # untouched lines preserved
+    backups = list(tmp_path.glob("server.properties.bak.*"))
+    assert backups, "apply must back up the file first"
+
+
+@pytest.mark.asyncio
+async def test_auto_service_and_tool(kernel):
+    from jarvis.tools import REGISTRY
+    from jarvis.tools.base import ToolContext
+    svc = kernel.services["evolve"]
+    report = await svc.auto_run(minutes=1.0)
+    assert report["experiments_run"] >= 1
+    ctx = ToolContext(config=kernel.config, db=kernel.db, bus=kernel.bus,
+                      services=kernel.services, user="owner")
+    r = await REGISTRY.call("evolve.auto", ctx, minutes=1)
+    assert r.ok and r.data["experiments_run"] >= 1
 
 
 # ------------------------------------------------------------- wiring -------
