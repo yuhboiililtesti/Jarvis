@@ -307,6 +307,8 @@ def test_run_cmd_timeout_is_reported():
 
 
 def test_clipboard_write_goes_through_run_cmd(monkeypatch):
+    if os.name != "nt":
+        pytest.skip("exercises the Windows clipboard path via run_cmd")
     from jarvis.tools.builtin import _win, clipboard_tool
     calls = []
 

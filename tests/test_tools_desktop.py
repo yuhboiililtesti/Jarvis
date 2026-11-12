@@ -9,6 +9,7 @@ test if it is ever reached.
 from __future__ import annotations
 
 import ctypes
+import os
 
 import pytest
 
@@ -244,6 +245,8 @@ def fi():
 
 
 def test_input_struct_matches_win32_abi():
+    if os.name != "nt":
+        pytest.skip("the INPUT structure is a Win32 ABI")
     expected = 40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28
     assert ctypes.sizeof(_win.INPUT) == expected
 

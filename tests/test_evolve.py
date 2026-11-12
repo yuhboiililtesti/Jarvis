@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from jarvis.evolve import (EvolutionEngine, RunConfig, ackley, evaluate_expression,
@@ -163,7 +165,7 @@ def test_settings_space_sampling_and_mutation():
 def test_command_benchmark_measures_wall_time():
     from jarvis.evolve import command_benchmark
     fitness = command_benchmark(
-        'python -c "import time; time.sleep(0.1 * {level})"', runs=1, warmup=0)
+        f'"{sys.executable}" -c "import time; time.sleep(0.1 * {{level}})"', runs=1, warmup=0)
     fast = fitness({"level": 1})
     slow = fitness({"level": 4})
     assert fast < slow  # real wall-clock scaling (0.1s vs 0.4s)
@@ -173,7 +175,7 @@ def test_system_tuner_finds_fastest_command_parameter():
     from jarvis.evolve import SystemTuner, SettingsSpace, Field, command_benchmark
     space = SettingsSpace("sleep", {"level": Field("int", low=1, high=9)})
     fitness = command_benchmark(
-        'python -c "import time; time.sleep(0.02 * {level})"', runs=1, warmup=0)
+        f'"{sys.executable}" -c "import time; time.sleep(0.02 * {{level}})"', runs=1, warmup=0)
     tuner = SystemTuner(space, fitness)
     res = tuner.tune(generations=12, population=15, seed=0)
     assert res.best.genome["level"] <= 2  # converges to the fastest setting
@@ -200,7 +202,7 @@ def test_tune_tools_registered_and_gated(kernel):
 async def test_tune_command_service_and_tool(kernel):
     svc = kernel.services["evolve"]
     res = await svc.tune_command(
-        'python -c "import time; time.sleep(0.02 * {level})"',
+        f'"{sys.executable}" -c "import time; time.sleep(0.02 * {{level}})"',
         low=1, high=9, runs=1, generations=10)
     assert res["kind"] == "tune:command"
     assert res["result"]["best"]["genome"]["level"] <= 2
@@ -371,7 +373,6 @@ def test_parallel_engine_matches_serial():
 
 
 def test_c_code_benchmark_compiles_and_times():
-    import pytest
     from jarvis.evolve import (C_SUM_SOURCE, c_flags_space, code_benchmark_fitness,
                                compiler_available, SystemTuner)
     cc = "cc"

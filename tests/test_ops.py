@@ -49,6 +49,9 @@ async def test_a_broken_provider_is_reported_with_a_repair(kernel, monkeypatch):
 
 
 async def test_tunnel_repair_runs_once_per_cooldown(kernel, monkeypatch):
+    import os
+    if os.name != "nt":
+        pytest.skip("tunnel repair is Windows-only (node-tunnel.ps1)")
     nodes = _Node()
     kernel.services["nodes"] = nodes
     calls: list[list[str]] = []
