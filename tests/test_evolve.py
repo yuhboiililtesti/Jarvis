@@ -292,6 +292,14 @@ def test_evolve_self_tool_registered(kernel):
     assert "evolve.self" in kernel.config.policy.auto_allow
 
 
+def test_mission_tools_registered(kernel):
+    from jarvis.tools import REGISTRY
+    for name in ("evolve.mission.submit", "evolve.mission.status",
+                 "evolve.mission.resume"):
+        assert REGISTRY.get(name) is not None, name
+        assert name in kernel.config.policy.auto_allow, name
+
+
 # ------------------------------------------------- Phase C: task interface ---
 
 def test_phase_c_tools_registered(kernel):

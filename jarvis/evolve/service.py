@@ -41,6 +41,7 @@ class EvolveService:
         self.db = getattr(jarvis, "db", None)
         self.bus = getattr(jarvis, "bus", None)
         self._tasks: dict[str, dict[str, Any]] = {}
+        self._missions: dict[str, Any] = {}
         self._mem: tuple[Any, Any, Any] | None = None
 
     # -- helpers ----------------------------------------------------------
@@ -450,3 +451,69 @@ class EvolveService:
             return compare_algorithms(envs=env_names, steps=steps, seeds=seeds)
 
         return await asyncio.to_thread(work)
+
+    # -- v1.0.0 missions (JARVIS is a client; EVOLVE owns execution) -----
+    def submit_mission(self, *, target: str, objective: str = "",
+                       minutes: float = 1.0, experiments: int = 3,
+                       workers: int = 2,
+                       capabilities: list[str] | None = None) -> dict[str, Any]:
+        """Submit an EVOLVE mission; returns its id immediately."""
+        try:
+            from evolve.mission import Mission, MissionRunner, MissionTask
+        except ImportError:
+            return {"ok": False, "error": "mission layer unavailable"}
+        mission = Mission(
+            target=target, objective=objective,
+            budget={"wall_time_seconds": max(0.5, minutes) * 60.0,
+                    "max_experiments": max(1, experiments),
+                    "max_parallel_workers": max(1, workers)},
+            capabilities=list(capabilities or []))
+        store, _artifacts, _models = self._memory()
+        from evolve.universal.types import MemoryContext
+        memory = MemoryContext(store=store,
+                               artifacts=_artifacts, models=_models)
+        task = MissionTask(mission, MissionRunner(
+            memory=memory, events=self.bus)).start()
+        self._missions[mission.mission_id] = task
+        return {"ok": True, "mission_id": mission.mission_id,
+                "target": target, "status": "running"}
+
+    def mission_status(self, mission_id: str) -> dict[str, Any]:
+        task = self._missions.get(mission_id)
+        if task is None:
+            return {"ok": False, "error": f"unknown mission {mission_id}"}
+        data = task.to_dict()
+        return {"ok": True, **data}
+
+    def resume_mission(self, mission_id: str) -> dict[str, Any]:
+        try:
+            from evolve.mission import MissionRunner, MissionTask
+        except ImportError:
+            return {"ok": False, "error": "mission layer unavailable"}
+        store, artifacts, models = self._memory()
+        from evolve.universal.types import MemoryContext
+        memory = MemoryContext(store=store, artifacts=artifacts, models=models)
+        runner = MissionRunner(memory=memory, events=self.bus)
+        state = runner._load_state(mission_id)  # noqa: SLF001
+        if state is None:
+            return {"ok": False, "error": f"no stored mission {mission_id}"}
+        from evolve.mission import Mission
+        mission = Mission.from_dict(state["mission"])
+        task = MissionTask(mission, runner)
+        task._done.clear()  # noqa: SLF001 — resume reuses the mission id
+
+        def _resume() -> None:
+            try:
+                task.result = runner.resume(mission_id)
+            except Exception as exc:  # pragma: no cover
+                from evolve.mission import MissionResult
+                task.result = MissionResult(
+                    mission_id=mission_id, target=mission.target,
+                    status="failed", error=f"{type(exc).__name__}: {exc}")
+            task._done.set()
+
+        import threading as _threading
+        task._thread = _threading.Thread(target=_resume, daemon=True)
+        task._thread.start()
+        self._missions[mission_id] = task
+        return {"ok": True, "mission_id": mission_id, "status": "running"}

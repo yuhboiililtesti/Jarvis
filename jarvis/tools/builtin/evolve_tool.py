@@ -427,3 +427,78 @@ class EvolveCompareTool(BaseTool):
             return ToolResult(ok=False, error=res["error"])
         return ToolResult(ok=True, data={"config": res["config"],
                                          "summary": res["summary"]})
+
+
+@register(["evolve.mission.submit"])
+class EvolveMissionSubmitTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.mission.submit",
+        summary="Submit an EVOLVE mission (target + objective + budget); returns its id immediately.",
+        category="evolve",
+        side_effect=SideEffect.NONE,   # EVOLVE owns execution and its own memory
+        params=(
+            ToolParam("target", "string", "game:tictactoe | project:game_demo | code:source | math:sphere | system:default", required=True),
+            ToolParam("objective", "string", "Metric to optimise (defaults per target).", default=""),
+            ToolParam("minutes", "number", "Wall-clock budget in minutes.", default=1.0),
+            ToolParam("experiments", "integer", "Maximum nested experiments.", default=3),
+            ToolParam("workers", "integer", "Maximum parallel workers.", default=2),
+            ToolParam("capabilities", "array", "Requested capabilities.", default=None),
+        ),
+        returns="object with the mission id (poll evolve.mission.status)",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        caps = kwargs.get("capabilities")
+        res = svc.submit_mission(
+            target=str(kwargs.get("target")),
+            objective=str(kwargs.get("objective") or ""),
+            minutes=float(kwargs.get("minutes", 1.0)),
+            experiments=int(kwargs.get("experiments", 3)),
+            workers=int(kwargs.get("workers", 2)),
+            capabilities=list(caps) if caps else None)
+        if res.get("ok") is False:
+            return ToolResult(ok=False, error=res.get("error"))
+        return ToolResult(ok=True, data=res)
+
+
+@register(["evolve.mission.status"])
+class EvolveMissionStatusTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.mission.status",
+        summary="Check a mission's status and verified result by mission id.",
+        category="evolve",
+        side_effect=SideEffect.NONE,
+        params=(ToolParam("mission_id", "string", "Mission id.", required=True),),
+        returns="object with status and the verified candidate when finished",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        res = svc.mission_status(str(kwargs.get("mission_id")))
+        return ToolResult(ok=res.get("ok", False), data=res,
+                          error=None if res.get("ok") else res.get("error"))
+
+
+@register(["evolve.mission.resume"])
+class EvolveMissionResumeTool(BaseTool):
+    spec = ToolSpec(
+        name="evolve.mission.resume",
+        summary="Resume a stored mission with its remaining budget.",
+        category="evolve",
+        side_effect=SideEffect.NONE,
+        params=(ToolParam("mission_id", "string", "Mission id.", required=True),),
+        returns="object with the resume status",
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        svc = _svc(ctx)
+        if svc is None:
+            return _missing()
+        res = svc.resume_mission(str(kwargs.get("mission_id")))
+        return ToolResult(ok=res.get("ok", False), data=res,
+                          error=None if res.get("ok") else res.get("error"))

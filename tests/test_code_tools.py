@@ -156,3 +156,15 @@ async def test_new_tools_registered_and_auto_allowed(kernel):
     for name in ("code.read", "code.search", "code.symbols", "code.diff",
                  "git.info", "monitor.probe"):
         assert name in kernel.config.policy.auto_allow, name
+
+
+async def test_sandbox_tools_registered_with_correct_gating(kernel):
+    # the remote runner status is read-only and auto-allowed; run_code
+    # executes programs and must NOT be auto-allowed
+    assert REGISTRY.get("sandbox.remote_status") is not None
+    assert "sandbox.remote_status" in kernel.config.policy.auto_allow
+    run_code = REGISTRY.get("sandbox.run_code")
+    assert run_code is not None
+    assert "sandbox.run_code" not in kernel.config.policy.auto_allow
+    from jarvis.tools.base import SideEffect
+    assert run_code.spec.side_effect == SideEffect.LOCAL_EXEC

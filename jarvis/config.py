@@ -166,11 +166,13 @@ class PolicyConfig:
             "anton.status", "anton.jobs", "anton.nodes", "anton.routines",
             "vision.ocr", "vision.screen",
             "code.read", "code.search", "code.symbols", "code.diff", "git.info",
-            "monitor.probe",
+            "monitor.probe", "sandbox.remote_status",
             "evolve.symbolic", "evolve.minimize", "evolve.selftune", "evolve.status",
             "evolve.tune", "evolve.auto", "evolve.self",
             "evolve.train", "evolve.get_status", "evolve.cancel",
             "evolve.list_models", "evolve.evaluate_model", "evolve.compare",
+            "evolve.mission.submit", "evolve.mission.status",
+            "evolve.mission.resume",
         ]
     )
     approval_timeout_s: float = 300.0
@@ -297,6 +299,10 @@ class SandboxConfig:
     wall_timeout_s: float = 30.0       # default wall-clock timeout
     kill_tree: bool = True             # kill the whole process tree, not just the child
     scrub_env: bool = True             # hand children a secret-free environment
+    # Remote code runner (sandbox.run_code): a separate machine reached through
+    # the operator's SSH config. Limits are kernel-enforced on the runner.
+    remote_host: str = "laptop"        # SSH host alias, not an address or secret
+    remote_connect_timeout_s: float = 8.0
 
 
 @dataclass
