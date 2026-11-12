@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -25,9 +27,12 @@ def ctx(cfg):
 
 
 @pytest.fixture
-def tree(tmp_path):
-    (tmp_path / "pkg").mkdir()
-    (tmp_path / "pkg" / "mod.py").write_text(
+def tree():
+    # the file boundary allows the home tree (and the JARVIS data dir), not
+    # /tmp on POSIX — keep the fixture inside home so the boundary is honest
+    base = Path(tempfile.mkdtemp(prefix="jarvis-code-", dir=str(Path.home())))
+    (base / "pkg").mkdir()
+    (base / "pkg" / "mod.py").write_text(
         "class Alpha:\n"
         "    def method_one(self):\n"
         "        return 1\n"
@@ -35,13 +40,14 @@ def tree(tmp_path):
         "def helper(x):\n"
         "    return x + 1\n",
         encoding="utf-8")
-    (tmp_path / "app.js").write_text(
+    (base / "app.js").write_text(
         "export function startApp() { return 1; }\n"
         "const helper = (x) => x;\n",
         encoding="utf-8")
-    (tmp_path / "notes.txt").write_text("alpha beta\nGamma delta\n",
-                                        encoding="utf-8")
-    return tmp_path
+    (base / "notes.txt").write_text("alpha beta\nGamma delta\n",
+                                    encoding="utf-8")
+    yield base
+    shutil.rmtree(base, ignore_errors=True)
 
 
 async def test_code_read_numbers_lines_and_ranges(ctx, tree):
@@ -100,10 +106,19 @@ async def test_code_diff_reports_changes(ctx, tree):
     assert same.ok and same.data["changed"] is False
 
 
-async def test_git_info_read_only_actions(ctx, tmp_path):
+@pytest.fixture
+def repo_dir():
+    base = Path(tempfile.mkdtemp(prefix="jarvis-git-", dir=str(Path.home())))
+    try:
+        yield base
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+
+
+async def test_git_info_read_only_actions(ctx, repo_dir):
     if shutil.which("git") is None:
         pytest.skip("git not on PATH")
-    repo = tmp_path / "repo"
+    repo = repo_dir / "repo"
     repo.mkdir()
     subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
     (repo / "a.txt").write_text("hello\n", encoding="utf-8")
