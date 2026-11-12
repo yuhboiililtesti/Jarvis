@@ -5,8 +5,9 @@ then `rules/coding.md`, plus the one rule module the task triggers.
 
 ## Project facts
 
-- Purpose: local-first, free, open-source personal assistant (Core on WIN11, satellites as nodes).
-- Run: `.venv\Scripts\python.exe -m jarvis serve` (HUD at http://127.0.0.1:8765/)
+- Purpose: local-first, free, open-source personal assistant (production Core on APOS; WIN11 is an interactive client, laptop a satellite).
+- Production Core: APOS `jarvis-core.service`, using `config/jarvis-core.toml` and `data-core`. Do not launch a duplicate production Core on WIN11.
+- Development-only local Core: `.venv\Scripts\python.exe -m jarvis serve` (http://127.0.0.1:8765/); first verify it will not conflict with the client tunnel or production topology.
 - Test: `.venv\Scripts\python.exe -m pytest -q`
 - Behavioural eval (needs Ollama): `.venv\Scripts\python.exe -m jarvis eval core`
 - Tool availability: `.venv\Scripts\python.exe -m jarvis tools --health`

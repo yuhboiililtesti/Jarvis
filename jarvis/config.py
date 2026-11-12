@@ -165,6 +165,8 @@ class PolicyConfig:
             "discovery.scan", "monitoring.status", "sandbox.status",
             "anton.status", "anton.jobs", "anton.nodes", "anton.routines",
             "vision.ocr", "vision.screen",
+            "code.read", "code.search", "code.symbols", "code.diff", "git.info",
+            "monitor.probe",
             "evolve.symbolic", "evolve.minimize", "evolve.selftune", "evolve.status",
             "evolve.tune", "evolve.auto", "evolve.self",
             "evolve.train", "evolve.get_status", "evolve.cancel",
