@@ -134,7 +134,7 @@ on the LAN. See [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) and [`docs/CAPABILITY-
 | **EVOLVE engine**: evolutionary search (genomes, populations, meta self-tuning), CLI + GUI | ✅ |
 | **Self-diagnostics**: subsystem checks and one bounded, audited repair | ✅ |
 | **MCP server**: other agents can call the read-only tool surface | ✅ |
-| **Vision**: local OCR over an image or the live screen (`vision.ocr`, `vision.screen`) | ✅ |
+| **Vision**: local OCR over an image, the live screen, or the in-memory reader (`vision.ocr`, `vision.screen`, `vision.live`); optional grounded VLM captions | ✅ |
 | **Tool choice at 120+ tools**: relevance shortlist + exact-repeat guard | ✅ |
 | Policy broker + approval gate + standing grants + DEFCON posture | ✅ |
 | Independent verifier (a tool's own "success" never settles a task) | ✅ |
@@ -301,7 +301,8 @@ jarvis/
   eval/       held-out evaluation suites and oracles
   ui/         the HUD (plain HTML/CSS/JS, offline)
 config/       jarvis.example.toml
-docs/         capability map, extending guide, sandbox, runtime, goals, ops, MCP
+docs/         capability map, extending guide, sandbox, runtime, goals, ops, MCP,
+              screen reader (SCREEN-READER.md)
 scripts/      install, run, night, node deploy/tunnel/verify, voice checks
 tests/        pytest suite (1,021 tests)
 plugins/      plugin template

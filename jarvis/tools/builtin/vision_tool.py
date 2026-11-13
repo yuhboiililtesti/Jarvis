@@ -11,7 +11,11 @@ as ``files.*`` (and its protected-location refusal).
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -23,10 +27,12 @@ from .file_ops import _guard
 
 log = get_logger("jarvis.tools.vision")
 
-__all__ = ["VisionOcrTool", "VisionScreenTool", "health", "IMAGE_EXTS", "MAX_LINES"]
+__all__ = ["VisionOcrTool", "VisionScreenTool", "VisionLiveTool", "health",
+           "IMAGE_EXTS", "MAX_LINES"]
 
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff")
 MAX_LINES = 500
+LIVE_URL = os.environ.get("JARVIS_SCREEN_LIVE_URL", "http://127.0.0.1:8799")
 _ENGINE: Any = None
 
 
@@ -191,3 +197,86 @@ class VisionScreenTool(BaseTool):
             log.exception("vision.screen failed")
             return ToolResult(ok=False, error=f"{type(exc).__name__}: {exc}",
                               certainty="unverified")
+
+
+def _fetch_latest(url: str, token: str | None,
+                  timeout: float = 3.5) -> dict[str, Any]:
+    request = urllib.request.Request(url.rstrip("/") + "/latest")
+    if token:
+        request.add_header("X-Jarvis-Screen-Token", token)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+@register(["vision.live", "screen.live"])
+class VisionLiveTool(BaseTool):
+    spec = ToolSpec(
+        name="vision.live",
+        summary=("Read the latest live screen text from the in-memory reader "
+                 "(no recording). Use for 'what is on my screen right now?'."),
+        version="1.0",
+        category="vision",
+        side_effect=SideEffect.NONE,
+        params=(
+            ToolParam("url", "string", f"Reader URL (default {LIVE_URL})."),
+            ToolParam("max_chars", "integer",
+                      "Truncate the text (default 6000, max 20000).", default=6000),
+            ToolParam("include_lines", "boolean",
+                      "Include per-line boxes and confidence.", default=False),
+        ),
+        returns=("object: {text, window, ts, age_s, line_count, width, height, "
+                 "latency_ms}"),
+        cheap=True,
+    )
+
+    async def run(self, ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        url = str(kwargs.get("url") or
+                  os.environ.get("JARVIS_SCREEN_LIVE_URL") or LIVE_URL).strip()
+        token = os.environ.get("JARVIS_SCREEN_TOKEN") or None
+        try:
+            payload = await asyncio.to_thread(_fetch_latest, url, token)
+        except urllib.error.HTTPError as exc:
+            detail = ""
+            try:
+                detail = (json.loads(exc.read().decode("utf-8")).get("error")
+                          or "")
+            except Exception:
+                pass
+            if exc.code == 401:
+                return ToolResult(
+                    ok=False,
+                    error=("the live screen reader requires "
+                           "JARVIS_SCREEN_TOKEN"),
+                    certainty="settled")
+            return ToolResult(
+                ok=False,
+                error=(f"live screen reader returned {exc.code}: "
+                       f"{detail or exc.reason}"),
+                certainty="settled")
+        except (urllib.error.URLError, OSError) as exc:
+            reason = getattr(exc, "reason", exc)
+            return ToolResult(
+                ok=False,
+                error=(f"live screen reader is not reachable at {url} "
+                       f"({reason}). Start it with "
+                       "'python -m jarvis.screen_live'."),
+                certainty="settled")
+        if not payload.get("ok", True):
+            return ToolResult(ok=False,
+                              error=str(payload.get("error") or "no sample"),
+                              certainty="settled")
+        limit = max(200, min(int(kwargs.get("max_chars") or 6000), 20000))
+        text = str(payload.get("text") or "")
+        data = {"text": text[:limit], "truncated": len(text) > limit,
+                "window": payload.get("window"), "ts": payload.get("ts"),
+                "age_s": payload.get("age_s"),
+                "line_count": payload.get("line_count"),
+                "width": payload.get("width"),
+                "height": payload.get("height"),
+                "latency_ms": payload.get("latency_ms"),
+                "engine": payload.get("engine", "rapidocr")}
+        if kwargs.get("include_lines"):
+            data["lines"] = payload.get("lines") or []
+        return ToolResult(ok=True, data=data,
+                          evidence={"method": "live-screen-ocr",
+                                    "age_s": data["age_s"]})

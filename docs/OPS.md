@@ -66,6 +66,12 @@ The production control plane runs both node tunnels from
 |---|---|---|
 | `127.0.0.1:2228` | `Topaz@10.0.0.200:2223` (PC) | PC `127.0.0.1:2228` |
 | `127.0.0.1:2230` | `topaz@10.0.0.234:2225` (laptop) | laptop `127.0.0.1:2226` |
+| `127.0.0.1:8799` | same PC leg (forward) | PC `127.0.0.1:8799` (live screen reader) |
+| PC `127.0.0.1:11435` | same PC leg (**reverse**) | APOS `127.0.0.1:11434` (Ollama for captions) |
+
+The last two legs connect the live screen reader (`docs/SCREEN-READER.md`):
+APOS reads `/latest` from the PC, and the PC calls llava through the reverse
+Ollama endpoint without exposing either port on the LAN.
 
 **Fixed defect:** the script used `wait -n`, so when the PC leg failed (during
 the PC-001 crash recovery the journal showed repeated `No route to host`),

@@ -18,6 +18,17 @@ log = get_logger("jarvis.tools")
 
 __all__ = ["ToolRegistry", "register", "REGISTRY", "CORE_SHORTLIST"]
 
+# Grammatical words appear in almost every request and in many summaries.
+# Matching them adds noise: "my" in a tool summary pulled the screen reader
+# into "summarize my notes" and displaced the core tools under a small limit.
+_SHORTLIST_STOPWORDS = frozenset({
+    "a", "an", "and", "are", "as", "at", "be", "by", "can", "could", "do",
+    "does", "for", "from", "how", "i", "in", "is", "it", "me", "my", "of",
+    "on", "or", "please", "should", "that", "the", "this", "to", "was", "we",
+    "were", "what", "when", "where", "which", "who", "why", "will", "with",
+    "would", "you", "your",
+})
+
 # Always offered to the model: the safe, everyday tools. A large registry (100+
 # tools) overwhelms a small model's tool choice, so the rest are selected by
 # relevance to the request.
@@ -106,7 +117,7 @@ class ToolRegistry:
         and cheap (no model call).
         """
         words = {w for w in re.findall(r"[a-z0-9_]+", (query or "").lower())
-                 if len(w) > 1}
+                 if len(w) > 1 and w not in _SHORTLIST_STOPWORDS}
         scored: list[tuple[int, str]] = []
         for spec in self.specs():
             haystack = " ".join([
