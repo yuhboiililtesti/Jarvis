@@ -76,7 +76,7 @@ tab and EVOLVE in the **EVOLVE** tab:
   and latest text, a current frame (on demand), and a *Describe* button that
   asks `llava:7b`; the caption is labelled a guess.
 - **EVOLVE**: EVOLVE availability, the last JARVIS evolve run, and the Arena
-  dashboard embedded from `http://127.0.0.1:8766/` (the PC tunnel forwards it).
+  dashboard embedded from `http://127.0.0.1:8770/` (the PC tunnel forwards it).
 - Deep links: `/#screen` and `/#evolve`.
 
 API (same-origin, so the browser never calls the reader directly):
