@@ -64,3 +64,20 @@ app states. Those remain the next milestones (the review's workflows 2–5).
    presses save, and verifies.
 3. Feed `outcomes.jsonl` into EVOLVE's memory and learn action selection
    against held-out real tasks.
+
+## Workflow results (2026-11-13)
+
+| # | Workflow | State | Evidence |
+|---|---|---|---|
+| 1 | Lab editor: type + save + verify | **verified** | 460.3 ms, exact bytes, SHA-256 |
+| 2 | Notepad | **blocked** | Windows 11 Notepad is a Store-app shim here and exposes no window (15 s wait, none) |
+| 3 | File Explorer: move a file | **verified** | randomized folders/name/window position; real keyboard+mouse; moved, content SHA-256 matched; 9.2 s |
+| 4 | Browser local form | not implemented | — |
+| 5 | Calculator state | not implemented | — |
+| 6 | Unexpected-dialog recovery | not implemented | — |
+
+Workflow #3 is driven by `scripts/explorer_workflow.py`: it launches Explorer,
+moves the window to a random position, proves focus (AttachThreadInput + ALT
+unlock + SwitchToThisWindow), clicks the file list, Ctrl+A/Ctrl+X, navigates,
+pastes, and verifies the filesystem independently. It does not trust Explorer's
+UI feedback.
