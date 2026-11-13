@@ -67,7 +67,7 @@ The production control plane runs both node tunnels from
 | `127.0.0.1:2228` | `Topaz@10.0.0.200:2223` (PC) | PC `127.0.0.1:2228` |
 | `127.0.0.1:2230` | `topaz@10.0.0.234:2225` (laptop) | laptop `127.0.0.1:2226` |
 | `127.0.0.1:8799` | same PC leg (forward) | PC `127.0.0.1:8799` (live screen reader) |
-| `127.0.0.1:8766` | same PC leg (forward) | APOS `127.0.0.1:8766` (EVOLVE Arena) |
+| `127.0.0.1:8770` | same PC leg (forward) | APOS `127.0.0.1:8770` (EVOLVE Arena; 8766 is AMSD) |
 | PC `127.0.0.1:11435` | same PC leg (**reverse**) | APOS `127.0.0.1:11434` (Ollama for captions) |
 
 The last two legs connect the live screen reader (`docs/SCREEN-READER.md`):
@@ -83,7 +83,7 @@ script is kept as `jarvis-node-tunnels.sh.bak-20261112`.
 
 **Probe the node as HTTP, never as SSH.** The satellite endpoint is a
 JSON-over-HTTP server (uvicorn), so an SSH probe of `127.0.0.1:2228` or
-`127.0.0.1:2230` hangs at "banner exchange" or is reset — that is expected and
+`127.0.0.1:2230` hangs at "banner exchange" or is reset â€” that is expected and
 does not indicate a broken tunnel. The correct probe is:
 
 ```bash
@@ -129,10 +129,10 @@ restarting the task, `8765`, `11435` and `2227` listen and
 the log at 5 MB and backs off to 60 s on repeated failures.
 
 The laptop leg remains unreachable directly from the PC (port 2225 times out;
-APOS reaches it). That leg is redundant — the Core reaches the laptop through
-APOS `127.0.0.1:2230` — so the backoff keeps it quiet.
+APOS reaches it). That leg is redundant â€” the Core reaches the laptop through
+APOS `127.0.0.1:2230` â€” so the backoff keeps it quiet.
 
 ## Related
 
-[RUNTIME.md](RUNTIME.md) · [GOALS.md](GOALS.md) · [SANDBOX.md](SANDBOX.md) ·
+[RUNTIME.md](RUNTIME.md) Â· [GOALS.md](GOALS.md) Â· [SANDBOX.md](SANDBOX.md) Â·
 [BUILD-NOTE.md](BUILD-NOTE.md)
