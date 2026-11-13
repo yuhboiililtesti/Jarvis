@@ -1,4 +1,4 @@
-﻿"""Console-free Windows supervisor for JARVIS SSH tunnels.
+"""Console-free Windows supervisor for JARVIS SSH tunnels.
 
 Runs under ``pythonw.exe``. It keeps localhost-only SSH forwards alive using
 **one SSH connection per host**:
@@ -61,7 +61,7 @@ GROUPS = (
         ("apos-node", 2227, "127.0.0.1", 2226),
         ("ollama-apos", 11435, "127.0.0.1", 11434),
         ("apos-core", 8765, "127.0.0.1", 8765),
-        ("evolve-arena", 8766, "127.0.0.1", 8766),
+        ("evolve-arena", 8770, "127.0.0.1", 8770),
     )),
     ("laptop", LAPTOP_HOST, LAPTOP_PORT, (
         ("laptop-node", 2226, "127.0.0.1", 2226),

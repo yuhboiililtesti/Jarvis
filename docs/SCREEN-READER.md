@@ -67,6 +67,22 @@ forgets the last sample, so nothing from the screen can be read until
 The installed `capture.cmd` lives in `%USERPROFILE%\bin`, which is added to the
 user `PATH` by `scripts/install-screen-capture.ps1`.
 
+## Dashboard
+
+The Command Center (`http://127.0.0.1:8765/`) has the reader in the **Screen**
+tab and EVOLVE in the **EVOLVE** tab:
+
+- **Screen**: capture on/off, samples/errors/interval/engine, the active window
+  and latest text, a current frame (on demand), and a *Describe* button that
+  asks `llava:7b`; the caption is labelled a guess.
+- **EVOLVE**: EVOLVE availability, the last JARVIS evolve run, and the Arena
+  dashboard embedded from `http://127.0.0.1:8766/` (the PC tunnel forwards it).
+- Deep links: `/#screen` and `/#evolve`.
+
+API (same-origin, so the browser never calls the reader directly):
+`/api/screen/health|latest|frame|describe|capture/{on|off}` and
+`/api/evolve/overview`.
+
 `/describe` always returns the grounded window title and OCR text alongside the
 caption, because small vision models invent details.
 

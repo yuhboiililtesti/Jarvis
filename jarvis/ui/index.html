@@ -7,8 +7,8 @@
   <title>JARVIS — Command Center</title>
   <!-- Absolute /static/ paths: the API serves this page at "/" and the assets under /static. -->
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/styles.css?v=20261114b" />
-  <link rel="stylesheet" href="/static/amber-theme.css?v=20261114b" />
+  <link rel="stylesheet" href="/static/styles.css?v=20261114c" />
+  <link rel="stylesheet" href="/static/amber-theme.css?v=20261114c" />
 </head>
 <body>
   <a class="skip-link" href="#chat-input">Skip to conversation</a>
@@ -67,6 +67,8 @@
         <button type="button" id="palette-open" class="btn btn-ghost" title="Command palette (Ctrl+K)">
           ⌘ K
         </button>
+        <button type="button" id="fs-btn" class="btn btn-ghost btn-xs"
+                title="Fullscreen (Esc to exit)">Fullscreen</button>
         <span class="clock" id="clock" aria-label="local time">--:--:--</span>
         <span id="conn-badge" class="badge badge-unknown" role="status" aria-live="polite">CONNECTING</span>
       </div>
@@ -209,7 +211,7 @@
           <div class="panel-pane" id="panel-evolve" role="tabpanel" aria-labelledby="tab-evolve" hidden>
             <div class="pane-toolbar">
               <button type="button" class="btn btn-ghost btn-xs" id="evolve-refresh">Refresh</button>
-              <a class="btn btn-ghost btn-xs" id="evolve-open" href="http://127.0.0.1:8766/" target="_blank" rel="noopener">Open Arena</a>
+              <a class="btn btn-ghost btn-xs" id="evolve-open" href="http://127.0.0.1:8770/" target="_blank" rel="noopener">Open Arena</a>
             </div>
             <div class="runtime-grid" id="evolve-status" aria-live="polite">
               <p class="empty">Loading EVOLVE status…</p>
@@ -442,7 +444,7 @@
     <p style="color:#e6f7ff;padding:1rem">JARVIS HUD requires JavaScript. Enable it to see live telemetry and the conversation.</p>
   </noscript>
 
-  <script type="module" src="/static/app.js?v=20261114b"></script>
+  <script type="module" src="/static/app.js?v=20261114c"></script>
   <script type="module" src="/static/device-context.js"></script>
 </body>
 </html>

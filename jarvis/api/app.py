@@ -188,7 +188,7 @@ def create_app(jarvis=None) -> FastAPI:
     async def evolve_overview() -> dict[str, Any]:
         """Evolve's availability, the last JARVIS evolve run, and the Arena."""
         info: dict[str, Any] = {
-            "arena": {"url": "http://127.0.0.1:8766/", "ok": False}}
+            "arena": {"url": "http://127.0.0.1:8770/", "ok": False}}
         try:
             import evolve as evolve_pkg  # noqa: PLC0415 - optional dependency
             info["evolve"] = {

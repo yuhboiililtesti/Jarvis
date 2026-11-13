@@ -67,6 +67,7 @@ The production control plane runs both node tunnels from
 | `127.0.0.1:2228` | `Topaz@10.0.0.200:2223` (PC) | PC `127.0.0.1:2228` |
 | `127.0.0.1:2230` | `topaz@10.0.0.234:2225` (laptop) | laptop `127.0.0.1:2226` |
 | `127.0.0.1:8799` | same PC leg (forward) | PC `127.0.0.1:8799` (live screen reader) |
+| `127.0.0.1:8766` | same PC leg (forward) | APOS `127.0.0.1:8766` (EVOLVE Arena) |
 | PC `127.0.0.1:11435` | same PC leg (**reverse**) | APOS `127.0.0.1:11434` (Ollama for captions) |
 
 The last two legs connect the live screen reader (`docs/SCREEN-READER.md`):
