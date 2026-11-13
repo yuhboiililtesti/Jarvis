@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import (FileResponse, JSONResponse, Response,
+                               StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
 from ..config import PROJECT_ROOT
@@ -86,6 +89,128 @@ def create_app(jarvis=None) -> FastAPI:
             "llm": kernel.config.llm.model,
             "ts": now_iso(),
         }
+
+    # ---------------------------------------------------------------- live screen
+    screen_url = os.environ.get("JARVIS_SCREEN_LIVE_URL",
+                                "http://127.0.0.1:8799")
+    screen_token = os.environ.get("JARVIS_SCREEN_TOKEN")
+
+    def _screen_headers() -> dict[str, str]:
+        return ({"X-Jarvis-Screen-Token": screen_token}
+                if screen_token else {})
+
+    async def _reader_get(path: str, timeout: float = 8.0,
+                          params: dict[str, Any] | None = None):
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            return await client.get(screen_url.rstrip("/") + path,
+                                    params=params, headers=_screen_headers())
+
+    @app.get("/api/screen/health")
+    async def screen_health() -> JSONResponse:
+        try:
+            response = await _reader_get("/health", timeout=4.0)
+        except Exception as exc:
+            return JSONResponse(
+                {"ok": False, "capturing": False,
+                 "error": f"reader unreachable: {type(exc).__name__}: {exc}"},
+                status_code=503)
+        return JSONResponse(response.json(), status_code=response.status_code)
+
+    @app.get("/api/screen/latest")
+    async def screen_latest() -> JSONResponse:
+        try:
+            response = await _reader_get("/latest", timeout=6.0)
+        except Exception as exc:
+            return JSONResponse(
+                {"ok": False, "error": f"reader unreachable: {exc}"},
+                status_code=503)
+        try:
+            payload = response.json()
+        except Exception:
+            payload = {"ok": False,
+                       "error": f"reader returned {response.status_code}"}
+        return JSONResponse(payload, status_code=response.status_code)
+
+    @app.get("/api/screen/frame")
+    async def screen_frame() -> Response:
+        try:
+            response = await _reader_get("/frame", timeout=10.0)
+        except Exception as exc:
+            return JSONResponse(
+                {"ok": False, "error": f"reader unreachable: {exc}"},
+                status_code=503)
+        if response.status_code != 200:
+            try:
+                payload = response.json()
+            except Exception:
+                payload = {"ok": False,
+                           "error": f"reader returned {response.status_code}"}
+            return JSONResponse(payload, status_code=response.status_code)
+        return Response(content=response.content, media_type="image/jpeg",
+                        headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/screen/describe")
+    async def screen_describe(q: str = "") -> JSONResponse:
+        try:
+            async with httpx.AsyncClient(timeout=150.0) as client:
+                response = await client.get(
+                    screen_url.rstrip("/") + "/describe",
+                    params={"q": q} if q else None,
+                    headers=_screen_headers())
+        except Exception as exc:
+            return JSONResponse(
+                {"ok": False, "error": f"reader unreachable: {exc}"},
+                status_code=503)
+        try:
+            payload = response.json()
+        except Exception:
+            payload = {"ok": False,
+                       "error": f"reader returned {response.status_code}"}
+        return JSONResponse(payload, status_code=response.status_code)
+
+    @app.post("/api/screen/capture/{state}")
+    async def screen_capture(state: str) -> JSONResponse:
+        if state not in ("on", "off"):
+            raise HTTPException(status_code=400,
+                                detail="state must be 'on' or 'off'")
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(
+                    screen_url.rstrip("/") + f"/capture/{state}",
+                    json={}, headers=_screen_headers())
+        except Exception as exc:
+            return JSONResponse(
+                {"ok": False, "error": f"reader unreachable: {exc}"},
+                status_code=503)
+        return JSONResponse(response.json(), status_code=response.status_code)
+
+    @app.get("/api/evolve/overview")
+    async def evolve_overview() -> dict[str, Any]:
+        """Evolve's availability, the last JARVIS evolve run, and the Arena."""
+        info: dict[str, Any] = {
+            "arena": {"url": "http://127.0.0.1:8766/", "ok": False}}
+        try:
+            import evolve as evolve_pkg  # noqa: PLC0415 - optional dependency
+            info["evolve"] = {
+                "available": True,
+                "version": getattr(evolve_pkg, "__version__", None),
+                "path": getattr(evolve_pkg, "__file__", None),
+            }
+        except Exception as exc:
+            info["evolve"] = {"available": False, "reason": str(exc)}
+        service = getattr(kernel, "evolve", None)
+        try:
+            info["last"] = service.status() if service is not None else None
+        except Exception as exc:
+            info["last"] = {"error": str(exc)}
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                response = await client.get(info["arena"]["url"])
+            info["arena"]["ok"] = response.status_code < 500
+            info["arena"]["status"] = response.status_code
+        except Exception as exc:
+            info["arena"]["error"] = f"{type(exc).__name__}: {exc}"
+        return info
 
     # ---------------------------------------------------------------- websocket
     @app.websocket("/ws")

@@ -103,6 +103,34 @@ Verification: both local ports listen; `POST /api/ops/check` returns
 `ok:true` with both nodes online. The PC leg can take up to ~30 s to
 establish while its sshd settles after boot.
 
+## PC-side tunnel supervisor (`scripts/jarvis-tunnels.py`)
+
+The PC runs its own supervisor (Task Scheduler task **JARVIS Agent**). It has
+**no default endpoints**: without the environment it logs
+`starting ... via <APOS_HOST>:2223` and retries forever, so the PC loses
+`127.0.0.1:8765` (Core), `11435` (APOS Ollama) and `2227` (APOS node) even
+though APOS is healthy.
+
+Required user environment variables:
+
+| Variable | Value used here |
+|---|---|
+| `JARVIS_APOS_HOST` | `10.0.0.63` |
+| `JARVIS_APOS_PORT` | `2223` |
+| `JARVIS_LAPTOP_HOST` | `10.0.0.234` |
+| `JARVIS_LAPTOP_PORT` | `2225` |
+| `JARVIS_SSH_USER` | `topaz` (the Linux user; Windows `USER=Topaz` is denied) |
+
+Observed 2026-11-12: with the placeholders and `Topaz@`, every leg exited
+`rc=255`; `tunnels.log` reached 25 MB. After setting the variables and
+restarting the task, `8765`, `11435` and `2227` listen and
+`GET /api/health` from the PC returns `core=ready`. The supervisor now rotates
+the log at 5 MB and backs off to 60 s on repeated failures.
+
+The laptop leg remains unreachable directly from the PC (port 2225 times out;
+APOS reaches it). That leg is redundant — the Core reaches the laptop through
+APOS `127.0.0.1:2230` — so the backoff keeps it quiet.
+
 ## Related
 
 [RUNTIME.md](RUNTIME.md) · [GOALS.md](GOALS.md) · [SANDBOX.md](SANDBOX.md) ·

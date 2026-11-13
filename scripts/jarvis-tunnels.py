@@ -61,6 +61,7 @@ GROUPS = (
         ("apos-node", 2227, "127.0.0.1", 2226),
         ("ollama-apos", 11435, "127.0.0.1", 11434),
         ("apos-core", 8765, "127.0.0.1", 8765),
+        ("evolve-arena", 8766, "127.0.0.1", 8766),
     )),
     ("laptop", LAPTOP_HOST, LAPTOP_PORT, (
         ("laptop-node", 2226, "127.0.0.1", 2226),
@@ -157,18 +158,46 @@ def _start(group: tuple[str, str, int, tuple[tuple[str, int, str, int], ...]]) -
     )
 
 
+def _rotate_log() -> None:
+    """Keep the retry log bounded (it grows fast while a host is unreachable)."""
+    try:
+        if LOG.exists() and LOG.stat().st_size > 5 * 1024 * 1024:
+            backup = LOG.with_name(LOG.name + ".1")
+            if backup.exists():
+                backup.unlink()
+            LOG.replace(backup)
+    except OSError:
+        pass
+
+
 def main() -> int:
+    _rotate_log()
     _install_kill_on_close_job()
     children: dict[str, subprocess.Popen[bytes]] = {}
+    failures: dict[str, int] = {}
+    started: dict[str, float] = {}
+    next_try: dict[str, float] = {}
     try:
         while True:
+            now = time.monotonic()
             for group in GROUPS:
                 name = group[0]
                 child = children.get(name)
-                if child is None or child.poll() is not None:
-                    if child is not None:
-                        _log(f"{name} exited rc={child.returncode}; restarting")
-                    children[name] = _start(group)
+                alive = child is not None and child.poll() is None
+                if alive or now < next_try.get(name, 0.0):
+                    continue
+                if child is not None:
+                    ran = time.monotonic() - started.get(name, 0.0)
+                    failures[name] = 0 if ran > 60 else failures.get(name, 0) + 1
+                    delay = min(60, 5 * max(1, failures[name]))
+                    _log(f"{name} exited rc={child.returncode} after "
+                         f"{ran:.0f}s; retrying in {delay}s")
+                else:
+                    failures[name] = 0
+                delay = min(60, 5 * max(1, failures[name]))
+                next_try[name] = time.monotonic() + delay
+                children[name] = _start(group)
+                started[name] = time.monotonic()
             time.sleep(5)
     except KeyboardInterrupt:
         pass

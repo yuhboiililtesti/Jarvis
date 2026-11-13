@@ -34,7 +34,7 @@ body::before,body::after{display:none!important}
 .reactor-wrap{width:clamp(235px,min(42vh,31vw),450px);filter:drop-shadow(0 0 18px rgba(255,126,12,.12))}
 .reactor-state{font-size:21px;font-weight:500;letter-spacing:.38em;color:#ffcf92;text-shadow:0 0 15px rgba(255,151,27,.3)}
 .reactor-sub{font-size:10px;color:#b99b80;letter-spacing:.22em}
-.panel-tabs{flex-wrap:nowrap;gap:5px;padding:11px 0 8px;overflow-x:auto;scrollbar-width:thin}.tab{padding:7px 10px;font-size:11px;border-radius:6px;flex-shrink:0}.tab.is-active{background:rgba(173,99,30,.14);border-color:#a76b32;color:#ffd49f;box-shadow:inset 0 -2px #f4a04e}.tab:hover{background:rgba(255,166,62,.07)}
+.panel-tabs{flex-wrap:wrap;gap:5px;padding:11px 2px 8px;overflow:visible}.tab{padding:7px 10px;font-size:11px;border-radius:6px;flex-shrink:0}.tab.is-active{background:#3a2410;border-color:#f4a04e;color:#ffe1b0;box-shadow:inset 0 -2px #f4a04e}.tab:hover{background:rgba(255,166,62,.07)}
 .panel-body{min-height:135px}.panel-pane{padding-top:11px}.card{padding:10px 12px;background:rgba(34,23,15,.45);border-color:#392719;border-radius:9px}.card-title{color:#f0d9c2}.card-desc{color:#baa28b}
 .input,.select{background:#0b0a09;border-color:#4b321e;border-radius:7px;color:#f2dfc9}.btn{border-radius:7px}.btn-primary{background:linear-gradient(110deg,#ffcb83,#e8953d);border-color:#ffcb83;color:#201307;font-weight:700}
 .col-right .feed-item{background:transparent;border-left-color:#a6692f;padding:9px 10px}.feed-item .fi-topic{color:#dfc3a2}
@@ -45,3 +45,12 @@ body::before,body::after{display:none!important}
 @media(max-width:1100px){.grid{grid-template-columns:200px minmax(0,1fr)}.col-right{display:none}.device-awareness{order:3;width:100%;justify-content:flex-start}.topbar{flex-wrap:wrap}}
 @media(max-width:740px){body{overflow:auto}.app{display:flex;flex-direction:column;min-height:100dvh;height:auto;padding:8px}.topbar-controls{width:100%;flex-wrap:wrap}.grid{display:flex;flex-direction:column;overflow:visible}.col-centre{order:1;min-height:570px}.col-left{order:2}.col-right{display:flex;order:3;min-height:180px}.stage{flex:0 0 315px}.reactor-wrap{width:255px}.panel-body{min-height:220px;max-height:350px}.convo{height:auto;min-height:240px}.transcript{min-height:130px;max-height:400px}.composer{flex-wrap:wrap}.composer-input{flex:1 0 100%}.device-awareness{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.bar-fill,.tab,.btn{transition:none!important}}
+
+/* Layout containment: the reactor must never overflow its stage (it covered the logo and tabs). */
+.stage{position:relative;flex:0 0 auto;min-height:0;overflow:hidden;padding:8px 0}
+.reactor-wrap{width:clamp(150px,24vh,300px)}
+.panel-body{min-height:180px}
+.panel-pane{overflow-y:auto;overscroll-behavior:contain}
+.panel-tabs{position:sticky;top:0;z-index:6;background:var(--bg-0,#0b0a09)}
+.screen-frame{max-height:32vh;width:auto;max-width:100%}
+.screen-text{max-height:30vh}

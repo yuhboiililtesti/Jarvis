@@ -7,8 +7,8 @@
   <title>JARVIS — Command Center</title>
   <!-- Absolute /static/ paths: the API serves this page at "/" and the assets under /static. -->
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/styles.css" />
-  <link rel="stylesheet" href="/static/amber-theme.css" />
+  <link rel="stylesheet" href="/static/styles.css?v=20261114b" />
+  <link rel="stylesheet" href="/static/amber-theme.css?v=20261114b" />
 </head>
 <body>
   <a class="skip-link" href="#chat-input">Skip to conversation</a>
@@ -167,6 +167,8 @@
 
         <div class="panel-tabs" role="tablist" aria-label="System panels">
           <button class="tab is-active" role="tab" id="tab-tools" aria-controls="panel-tools" aria-selected="true" data-tab="tools">Tools</button>
+          <button class="tab" role="tab" id="tab-screen" aria-controls="panel-screen" aria-selected="false" data-tab="screen">Screen</button>
+          <button class="tab" role="tab" id="tab-evolve" aria-controls="panel-evolve" aria-selected="false" data-tab="evolve">EVOLVE</button>
           <button class="tab" role="tab" id="tab-memory" aria-controls="panel-memory" aria-selected="false" data-tab="memory">Memory</button>
           <button class="tab" role="tab" id="tab-tasks" aria-controls="panel-tasks" aria-selected="false" data-tab="tasks">Tasks</button>
           <button class="tab" role="tab" id="tab-alerts" aria-controls="panel-alerts" aria-selected="false" data-tab="alerts">Alerts</button>
@@ -183,6 +185,36 @@
               <button type="button" class="btn btn-ghost btn-xs" id="tools-refresh">Refresh</button>
             </div>
             <div class="list" id="tools-list" aria-live="polite"><p class="empty">Loading tools…</p></div>
+          </div>
+
+          <!-- Screen: live, in-memory text + on-demand frame; capture is a switch. -->
+          <div class="panel-pane" id="panel-screen" role="tabpanel" aria-labelledby="tab-screen" hidden>
+            <div class="pane-toolbar">
+              <button type="button" class="btn btn-ghost btn-xs" id="screen-on">Capture on</button>
+              <button type="button" class="btn btn-ghost btn-xs" id="screen-off">Capture off</button>
+              <button type="button" class="btn btn-ghost btn-xs" id="screen-refresh">Refresh</button>
+              <button type="button" class="btn btn-ghost btn-xs" id="screen-describe" title="Ask the local vision model; the caption is a guess">Describe</button>
+            </div>
+            <div class="runtime-grid" id="screen-status" aria-live="polite">
+              <p class="empty">Loading screen reader status…</p>
+            </div>
+            <h3 class="panel-subtitle">Active window and latest text</h3>
+            <pre class="screen-text" id="screen-text">Not loaded.</pre>
+            <h3 class="panel-subtitle">Current frame (on demand; never stored)</h3>
+            <img class="screen-frame" id="screen-frame" alt="Current screen frame" hidden />
+            <p class="form-status" id="screen-note" role="status"></p>
+          </div>
+
+          <!-- EVOLVE: live status plus the Arena dashboard. -->
+          <div class="panel-pane" id="panel-evolve" role="tabpanel" aria-labelledby="tab-evolve" hidden>
+            <div class="pane-toolbar">
+              <button type="button" class="btn btn-ghost btn-xs" id="evolve-refresh">Refresh</button>
+              <a class="btn btn-ghost btn-xs" id="evolve-open" href="http://127.0.0.1:8766/" target="_blank" rel="noopener">Open Arena</a>
+            </div>
+            <div class="runtime-grid" id="evolve-status" aria-live="polite">
+              <p class="empty">Loading EVOLVE status…</p>
+            </div>
+            <iframe class="arena-frame" id="evolve-frame" title="EVOLVE Arena" loading="lazy"></iframe>
           </div>
 
           <div class="panel-pane" id="panel-memory" role="tabpanel" aria-labelledby="tab-memory" hidden>
@@ -410,7 +442,7 @@
     <p style="color:#e6f7ff;padding:1rem">JARVIS HUD requires JavaScript. Enable it to see live telemetry and the conversation.</p>
   </noscript>
 
-  <script type="module" src="/static/app.js"></script>
+  <script type="module" src="/static/app.js?v=20261114b"></script>
   <script type="module" src="/static/device-context.js"></script>
 </body>
 </html>

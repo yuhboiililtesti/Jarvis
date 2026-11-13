@@ -143,6 +143,7 @@ class ScreenSampler:
         self.error: str | None = None
         self.samples = 0
         self.errors = 0
+        self.enabled = True
         self.started_at = time.time()
 
     # -- sampling --------------------------------------------------------
@@ -175,7 +176,7 @@ class ScreenSampler:
 
     def _loop(self) -> None:
         logged = False
-        while not self._stop.is_set():
+        while not self._stop.is_set() and self.enabled:
             try:
                 self.sample_once()
                 logged = False
@@ -186,6 +187,8 @@ class ScreenSampler:
             self._stop.wait(self.interval)
 
     def start(self) -> None:
+        if not self.enabled:
+            return
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
@@ -200,9 +203,27 @@ class ScreenSampler:
             self._thread.join(timeout=5)
         self._thread = None
 
+    # -- capture switch ---------------------------------------------------
+    def pause(self) -> None:
+        """Stop sampling and forget the last sample (no screen data is served)."""
+        with self._lock:
+            self.enabled = False
+            self.latest = None
+            self.error = None
+        self.stop()
+        log.info("screen capture off")
+
+    def resume(self) -> None:
+        with self._lock:
+            self.enabled = True
+            self.error = None
+        self.start()
+        log.info("screen capture on")
+
     def health(self) -> dict[str, Any]:
         with self._lock:
             return {"ok": self.error is None and self.latest is not None,
+                    "capturing": self.enabled,
                     "engine": "rapidocr (ONNX, cpu, local)",
                     "interval_s": self.interval,
                     "all_screens": self.all_screens,
@@ -279,6 +300,10 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             self._json(401, {"ok": False, "error": "unauthorized"})
             return
+        if path in ("/latest", "/frame", "/describe") and not sampler.enabled:
+            self._json(409, {"ok": False, "capturing": False,
+                             "error": "capture is off"})
+            return
         if path == "/health":
             self._json(200, sampler.health())
             return
@@ -334,9 +359,26 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/":
             self._json(200, {
                 "service": "jarvis screen live",
-                "endpoints": ["/health", "/latest", "/frame", "/describe"],
+                "endpoints": ["/health", "/latest", "/frame", "/describe",
+                              "POST /capture/on", "POST /capture/off"],
                 "recording": False,
             })
+            return
+        self._json(404, {"ok": False, "error": "not found"})
+
+    def do_POST(self) -> None:  # noqa: N802 - http.server API
+        sampler: ScreenSampler = self.server.sampler  # type: ignore[attr-defined]
+        path = urlsplit(self.path).path
+        if not self._authorized():
+            self._json(401, {"ok": False, "error": "unauthorized"})
+            return
+        if path == "/capture/on":
+            sampler.resume()
+            self._json(200, {"ok": True, "capturing": True})
+            return
+        if path == "/capture/off":
+            sampler.pause()
+            self._json(200, {"ok": True, "capturing": False})
             return
         self._json(404, {"ok": False, "error": "not found"})
 

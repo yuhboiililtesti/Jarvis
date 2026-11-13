@@ -158,3 +158,56 @@ def test_vision_live_is_auto_allowed_by_default():
     """Read-only, local, same category as vision.screen: no approval prompt."""
     from jarvis.config import PolicyConfig
     assert "vision.live" in PolicyConfig().auto_allow
+
+
+def _post(url: str):
+    request = urllib.request.Request(url, data=b"{}", method="POST",
+                                     headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=5) as response:
+        return response.status, json.loads(response.read().decode("utf-8"))
+
+
+def test_capture_off_stops_sampling_and_refuses_reads(live_server):
+    _server, sampler, url = live_server
+    status, payload = _post(url + "/capture/off")
+    assert status == 200
+    assert payload == {"ok": True, "capturing": False}
+    assert sampler.enabled is False
+    assert sampler.latest is None, "pausing must forget the last screen sample"
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        _get(url + "/latest")
+    assert exc.value.code == 409
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        urllib.request.urlopen(url + "/frame", timeout=5)
+    assert exc.value.code == 409
+    _status, health = _get(url + "/health")
+    assert health["capturing"] is False
+
+
+def test_capture_on_resumes_sampling(live_server):
+    import time as _time
+
+    _server, _sampler, url = live_server
+    _post(url + "/capture/off")
+    _status, payload = _post(url + "/capture/on")
+    assert payload == {"ok": True, "capturing": True}
+    for _ in range(100):
+        try:
+            _status, latest = _get(url + "/latest")
+            break
+        except urllib.error.HTTPError:
+            _time.sleep(0.02)
+    else:
+        pytest.fail("no sample after capture on")
+    assert latest["ok"] is True
+    assert latest["text"] == "known text"
+
+
+async def test_tool_reports_capture_off(live_server, monkeypatch):
+    _server, _sampler, url = live_server
+    _post(url + "/capture/off")
+    monkeypatch.setenv("JARVIS_SCREEN_LIVE_URL", url)
+    ctx = ToolContext(config=None, db=None, bus=None)
+    result = await REGISTRY.get("vision.live").run(ctx)
+    assert result.ok is False
+    assert "capture is off" in (result.error or "")

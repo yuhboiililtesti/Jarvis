@@ -41,10 +41,31 @@ One-shot check (prints JSON and exits):
 
 | Endpoint | Returns |
 |---|---|
-| `GET /health` | sampler state, interval, samples, errors, engine |
+| `GET /health` | sampler state, `capturing`, interval, samples, errors, engine |
 | `GET /latest` | latest OCR text, lines, active window, age, OCR latency |
 | `GET /frame` | the **current** JPEG, captured on request (never stored) |
 | `GET /describe[?q=...]` | `{description, kind:"vision-guess", model, window, text}` |
+| `POST /capture/off` | stop sampling, forget the last sample, refuse reads (409) |
+| `POST /capture/on` | resume sampling |
+
+## Capture on / off
+
+The installed command (also `scripts\capture.cmd` in the repository):
+
+```powershell
+capture off       # stop sampling; /latest, /frame and /describe return 409
+capture on        # resume (starts the reader hidden if it is not running)
+capture status    # on / off / not running
+capture off -Stop # pause and kill the reader process
+```
+
+While capture is off the service is idle (no OCR, no screen access) and it
+forgets the last sample, so nothing from the screen can be read until
+`capture on`. The switch is also exposed as `POST /capture/off` and
+`POST /capture/on` for JARVIS.
+
+The installed `capture.cmd` lives in `%USERPROFILE%\bin`, which is added to the
+user `PATH` by `scripts/install-screen-capture.ps1`.
 
 `/describe` always returns the grounded window title and OCR text alongside the
 caption, because small vision models invent details.
