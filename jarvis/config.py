@@ -164,7 +164,7 @@ class PolicyConfig:
             "files.read", "files.list", "nodes.status",
             "discovery.scan", "monitoring.status", "sandbox.status",
             "anton.status", "anton.jobs", "anton.nodes", "anton.routines",
-            "vision.ocr", "vision.screen",
+            "vision.ocr", "vision.screen", "vision.live",
             "code.read", "code.search", "code.symbols", "code.diff", "git.info",
             "monitor.probe", "sandbox.remote_status",
             "evolve.symbolic", "evolve.minimize", "evolve.selftune", "evolve.status",
