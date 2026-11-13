@@ -1,4 +1,4 @@
-"""``jarvis.screen_live`` — live, in-memory screen text reader.
+"""``jarvis.screen_live`` â€” live, in-memory screen text reader.
 
 A small loopback service that samples the screen, OCRs it locally, and keeps
 **only the latest result in memory**. Nothing is written to disk, no frames are
@@ -6,10 +6,10 @@ retained, and no history is kept: this is a live view, not a recording.
 
 Endpoints (``127.0.0.1:8799`` by default):
 
-* ``GET /health``   — sampler state, interval, sample/error counts, engine
-* ``GET /latest``   — the latest OCR text, window title, timestamp, latency
-* ``GET /frame``    — a **current** JPEG captured on request (never stored)
-* ``GET /describe`` — a vision-model caption of the current frame (if a VLM is
+* ``GET /health``   â€” sampler state, interval, sample/error counts, engine
+* ``GET /latest``   â€” the latest OCR text, window title, timestamp, latency
+* ``GET /frame``    â€” a **current** JPEG captured on request (never stored)
+* ``GET /describe`` â€” a vision-model caption of the current frame (if a VLM is
   configured; otherwise a clear 503)
 
 Local only: it binds loopback, and an optional ``JARVIS_SCREEN_TOKEN`` must be
@@ -99,32 +99,12 @@ def _mark_cursor(image: Any):
 
 
 def _grab_screen(all_screens: bool):
-    """Current screen as a PIL image.
-
-    Uses DXGI Desktop Duplication (``dxcam``) for the primary monitor when
-    available — it also works for borderless games, where GDI ``BitBlt`` can
-    return black — and falls back to Pillow. ``JARVIS_SCREEN_CAPTURE=pil``
-    forces the fallback.
-    """
-    global _DXCAM, _DXCAM_FAILED, _DXCAM_LAST
-    if (sys.platform == "win32" and not all_screens and not _DXCAM_FAILED
-            and os.environ.get("JARVIS_SCREEN_CAPTURE", "").lower() != "pil"):
-        try:
-            import dxcam
-            if _DXCAM is None:
-                _DXCAM = dxcam.create(output_color="RGB")
-            if _DXCAM is not None:
-                frame = _DXCAM.grab()
-                if frame is not None:
-                    _DXCAM_LAST = frame
-                if _DXCAM_LAST is not None:
-                    # dxcam returns None when nothing changed; repeating the
-                    # last frame is correct (and avoids a 150 ms GDI capture).
-                    from PIL import Image
-                    return Image.fromarray(_DXCAM_LAST)
-        except Exception:
-            _DXCAM_FAILED = True
-            log.warning("DXGI capture unavailable; using Pillow instead")
+    """Current screen as a PIL image (OCR/PIL fallback path)."""
+    array = _grab_array(all_screens)
+    if array is not None:
+        import numpy as np
+        from PIL import Image
+        return Image.fromarray(np.ascontiguousarray(array[:, :, ::-1]))
     from PIL import ImageGrab
     if all_screens:
         try:
@@ -134,11 +114,37 @@ def _grab_screen(all_screens: bool):
     return ImageGrab.grab()
 
 
+def _grab_array(all_screens: bool):
+    """Current screen as a BGR numpy array, or None if DXGI is unavailable."""
+    global _DXCAM, _DXCAM_FAILED, _DXCAM_LAST
+    if (sys.platform == "win32" and not all_screens and not _DXCAM_FAILED
+            and os.environ.get("JARVIS_SCREEN_CAPTURE", "").lower() != "pil"):
+        try:
+            import dxcam
+            if _DXCAM is None:
+                _DXCAM = dxcam.create(output_color="BGR")
+            if _DXCAM is not None:
+                frame = _DXCAM.grab()
+                if frame is not None:
+                    _DXCAM_LAST = frame
+                if _DXCAM_LAST is not None:
+                    # dxcam returns None when nothing changed; repeating the
+                    # last frame is correct (and avoids a 150 ms GDI capture).
+                    return _DXCAM_LAST
+        except Exception:
+            _DXCAM_FAILED = True
+            log.warning("DXGI capture unavailable; using Pillow instead")
+    return None
+
+
 def _ocr_image(image: Any) -> dict[str, Any]:
     import numpy as np
     from .tools.builtin.vision_tool import _ocr
 
-    array = np.array(image.convert("RGB"))[:, :, ::-1]  # RapidOCR wants BGR
+    if hasattr(image, "convert"):  # PIL image
+        array = np.array(image.convert("RGB"))[:, :, ::-1]
+    else:  # BGR numpy array from DXGI
+        array = image
     return _ocr(array)
 
 
@@ -290,9 +296,64 @@ def _encode_jpeg(image: Any, quality: int) -> bytes:
     return buffer.getvalue()
 
 
+def _mark_cursor_array(array: Any):
+    """Draw the pointer marker on a BGR array (screen grabs omit the cursor)."""
+    position = _cursor_position()
+    if position is None:
+        return array
+    try:
+        import cv2
+    except Exception:
+        return array
+    image = array.copy()
+    x, y = position
+    cv2.circle(image, (x, y), 10, (70, 70, 255), 2)
+    cv2.line(image, (x - 16, y), (x - 10, y), (255, 255, 255), 1)
+    cv2.line(image, (x + 10, y), (x + 16, y), (255, 255, 255), 1)
+    cv2.line(image, (x, y - 16), (x, y - 10), (255, 255, 255), 1)
+    cv2.line(image, (x, y + 10), (x, y + 16), (255, 255, 255), 1)
+    return image
+
+
+def _encode_jpeg_array(array: Any, quality: int) -> bytes:
+    """Native libjpeg-turbo first; OpenCV then Pillow as fallbacks."""
+    try:
+        import simplejpeg
+        return simplejpeg.encode_jpeg(array, quality=int(quality),
+                                      colorspace="BGR")
+    except Exception:
+        pass
+    try:
+        import cv2
+        ok, buffer = cv2.imencode(
+            ".jpg", array, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
+        if ok:
+            return buffer.tobytes()
+    except Exception:
+        pass
+    from PIL import Image
+    buffer = io.BytesIO()
+    Image.fromarray(array[:, :, ::-1]).save(buffer, "JPEG", quality=quality)
+    return buffer.getvalue()
+
+
 def frame_jpeg(all_screens: bool = False, quality: int = 70,
                max_width: int | None = None,
                cursor: bool = True) -> bytes:
+    array = _grab_array(all_screens)
+    if array is not None:
+        try:
+            import cv2
+            if max_width and array.shape[1] > max_width:
+                ratio = max_width / array.shape[1]
+                array = cv2.resize(
+                    array, (max_width, max(1, int(array.shape[0] * ratio))),
+                    interpolation=cv2.INTER_AREA)
+            if cursor:
+                array = _mark_cursor_array(array)
+            return _encode_jpeg_array(array, quality)
+        except Exception:
+            pass
     image = _grab_screen(all_screens)
     if max_width and image.width > max_width:
         ratio = max_width / image.width
@@ -345,6 +406,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1:8765")
         self.end_headers()
         self.wfile.write(raw)
 
@@ -401,6 +463,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "image/jpeg")
             self.send_header("Content-Length", str(len(raw)))
             self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1:8765")
             self.end_headers()
             self.wfile.write(raw)
             return
@@ -410,7 +473,7 @@ class _Handler(BaseHTTPRequestHandler):
                 fps = float((query.get("fps") or ["15"])[0])
             except ValueError:
                 fps = 15.0
-            fps = max(1.0, min(fps, 30.0))
+            fps = max(1.0, min(fps, 60.0))
             try:
                 scale = int((query.get("scale") or ["1280"])[0])
             except ValueError:
@@ -424,6 +487,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type",
                              "multipart/x-mixed-replace; boundary=frame")
             self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1:8765")
             self.end_headers()
             next_frame = time.perf_counter()
             try:

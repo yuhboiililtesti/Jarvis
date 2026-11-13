@@ -175,7 +175,7 @@ class PolicyConfig:
             "evolve.mission.resume",
         ]
     )
-    approval_timeout_s: float = 300.0
+    approval_timeout_s: float = 30.0
     always_deny: list[str] = field(default_factory=list)
 
 

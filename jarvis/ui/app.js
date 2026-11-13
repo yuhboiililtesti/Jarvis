@@ -5,9 +5,9 @@
    Loaded as an ES module:  <script type="module" src="app.js"></script>
    ========================================================================= */
 
-import { Api, BusSocket, streamChat, wsUrl } from "./transport.js?v=20261114e";
-import { ArcReactor, Sparkline } from "./reactor.js?v=20261114e";
-import { VoiceController } from "./voice.js?v=20261114e";
+import { Api, BusSocket, streamChat, wsUrl } from "./transport.js?v=20261114f";
+import { ArcReactor, Sparkline } from "./reactor.js?v=20261114f";
+import { VoiceController } from "./voice.js?v=20261114f";
 
 /*  -  small DOM helpers  -  */
 const $ = (id) => document.getElementById(id);
@@ -1392,11 +1392,14 @@ function toggleLiveScreen() {
   screenLive = true;
   live.hidden = false;
   $("screen-frame").hidden = true;
-  live.src = `/api/screen/stream?fps=30&scale=1280&ts=${Date.now()}`;
+  const local = ["127.0.0.1", "localhost"].includes(location.hostname);
+  live.src = local
+    ? `http://127.0.0.1:8799/stream.mjpg?fps=60&scale=1280&quality=55&ts=${Date.now()}`
+    : `/api/screen/stream?fps=60&scale=1280&quality=55&ts=${Date.now()}`;
   btn.textContent = "Stop live";
   btn.setAttribute("aria-pressed", "true");
   $("screen-note").textContent =
-    "Live MJPEG at 30 fps, 1280 wide, cursor marker drawn at the real pointer position. OCR keeps its own interval.";
+    "Live MJPEG at 60 fps, 1280 wide, cursor marker at the real pointer. OCR keeps its own interval.";
 }
 
 async function screenCapture(state) {

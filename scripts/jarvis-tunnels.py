@@ -171,6 +171,13 @@ def _rotate_log() -> None:
 
 
 def main() -> int:
+    # Fail fast and loudly if the endpoints were never configured. Retrying a
+    # placeholder forever hides the real problem (and used to fill the log).
+    if APOS_HOST.startswith("<") or LAPTOP_HOST.startswith("<"):
+        _log("FATAL: set JARVIS_APOS_HOST and JARVIS_LAPTOP_HOST "
+             "(and JARVIS_SSH_USER for Linux hosts); refusing to start")
+        return 2
+
     _rotate_log()
     _install_kill_on_close_job()
     children: dict[str, subprocess.Popen[bytes]] = {}

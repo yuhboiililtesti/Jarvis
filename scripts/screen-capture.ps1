@@ -65,7 +65,7 @@ switch ($Action) {
             -Headers $headers | Out-Null
         Write-Output "capture: off"
         if ($Stop) {
-            Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+            Get-CimInstance Win32_Process -Filter "Name='python.exe' or Name='pythonw.exe'" |
                 Where-Object { $_.CommandLine -match "jarvis\.screen_live" } |
                 ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
             Write-Output "reader: stopped"
