@@ -74,12 +74,28 @@ was torn down with it. Each leg is now supervised independently and retried
 every 5 s; one node's failure can no longer break the other. The previous
 script is kept as `jarvis-node-tunnels.sh.bak-20261112`.
 
-Verification: both local ports listen after restart; the PC leg takes up to
-~30 s to establish while its sshd settles after boot. The PC leg terminated a
-general SSH probe (`Connection closed`) because it fronts the node endpoint,
-not the general sshd; that is expected. A laptop tunnel that hangs at banner
-exchange while `10.0.0.234:2225` answers should be retested when the laptop is
-idle — a CPU-saturated laptop can starve the node endpoint.
+**Probe the node as HTTP, never as SSH.** The satellite endpoint is a
+JSON-over-HTTP server (uvicorn), so an SSH probe of `127.0.0.1:2228` or
+`127.0.0.1:2230` hangs at "banner exchange" or is reset — that is expected and
+does not indicate a broken tunnel. The correct probe is:
+
+```bash
+curl -s -i -m 8 http://127.0.0.1:2230/node/health | head -1
+# HTTP/1.1 401 Unauthorized   -> tunnel + node are alive (token required)
+```
+
+**Laptop node unit (2026-11-12):** `jarvis-node.service` is a **user** unit
+(`~/.config/systemd/user/jarvis-node.service`), enabled, with
+`Linger=yes`; it runs uvicorn on `127.0.0.1:2226`. A five-day-old node
+process was still bound to 2226 and was stopped manually; because the unit's
+`Restart=on-failure` does not restart after a clean signal, the unit stayed
+enabled but inactive and the tunnel had nothing to forward to. Restored with
+`systemctl --user start jarvis-node`; the Core then reported `ok:true` with
+laptop **53.84 ms** and PC **43.88 ms**.
+
+Verification: both local ports listen; `POST /api/ops/check` returns
+`ok:true` with both nodes online. The PC leg can take up to ~30 s to
+establish while its sshd settles after boot.
 
 ## Related
 
