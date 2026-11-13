@@ -149,6 +149,28 @@ def create_app(jarvis=None) -> FastAPI:
         return Response(content=response.content, media_type="image/jpeg",
                         headers={"Cache-Control": "no-store"})
 
+    @app.get("/api/screen/stream")
+    async def screen_stream(fps: float = 15.0, scale: int = 1280,
+                            quality: int = 55) -> StreamingResponse:
+        """Proxy the reader's MJPEG stream (cursor marker included)."""
+        async def frames():
+            try:
+                async with httpx.AsyncClient(timeout=None) as client:
+                    async with client.stream(
+                            "GET", screen_url.rstrip("/") + "/stream.mjpg",
+                            params={"fps": fps, "scale": scale,
+                                    "quality": quality},
+                            headers=_screen_headers()) as response:
+                        async for chunk in response.aiter_raw():
+                            yield chunk
+            except Exception:
+                return
+
+        return StreamingResponse(
+            frames(),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+            headers={"Cache-Control": "no-store"})
+
     @app.get("/api/screen/describe")
     async def screen_describe(q: str = "") -> JSONResponse:
         try:

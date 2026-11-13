@@ -7,8 +7,8 @@
   <title>JARVIS — Command Center</title>
   <!-- Absolute /static/ paths: the API serves this page at "/" and the assets under /static. -->
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/styles.css?v=20261114c" />
-  <link rel="stylesheet" href="/static/amber-theme.css?v=20261114c" />
+  <link rel="stylesheet" href="/static/styles.css?v=20261114d" />
+  <link rel="stylesheet" href="/static/amber-theme.css?v=20261114d" />
 </head>
 <body>
   <a class="skip-link" href="#chat-input">Skip to conversation</a>
@@ -195,6 +195,7 @@
               <button type="button" class="btn btn-ghost btn-xs" id="screen-on">Capture on</button>
               <button type="button" class="btn btn-ghost btn-xs" id="screen-off">Capture off</button>
               <button type="button" class="btn btn-ghost btn-xs" id="screen-refresh">Refresh</button>
+              <button type="button" class="btn btn-ghost btn-xs" id="screen-live-btn" aria-pressed="false">Live view</button>
               <button type="button" class="btn btn-ghost btn-xs" id="screen-describe" title="Ask the local vision model; the caption is a guess">Describe</button>
             </div>
             <div class="runtime-grid" id="screen-status" aria-live="polite">
@@ -204,6 +205,7 @@
             <pre class="screen-text" id="screen-text">Not loaded.</pre>
             <h3 class="panel-subtitle">Current frame (on demand; never stored)</h3>
             <img class="screen-frame" id="screen-frame" alt="Current screen frame" hidden />
+            <img class="screen-frame" id="screen-live" alt="Live screen stream" hidden />
             <p class="form-status" id="screen-note" role="status"></p>
           </div>
 
@@ -444,7 +446,7 @@
     <p style="color:#e6f7ff;padding:1rem">JARVIS HUD requires JavaScript. Enable it to see live telemetry and the conversation.</p>
   </noscript>
 
-  <script type="module" src="/static/app.js?v=20261114c"></script>
+  <script type="module" src="/static/app.js?v=20261114d"></script>
   <script type="module" src="/static/device-context.js"></script>
 </body>
 </html>

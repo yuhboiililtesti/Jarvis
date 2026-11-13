@@ -5,9 +5,9 @@
    Loaded as an ES module:  <script type="module" src="app.js"></script>
    ========================================================================= */
 
-import { Api, BusSocket, streamChat, wsUrl } from "./transport.js?v=20261114c";
-import { ArcReactor, Sparkline } from "./reactor.js?v=20261114c";
-import { VoiceController } from "./voice.js?v=20261114c";
+import { Api, BusSocket, streamChat, wsUrl } from "./transport.js?v=20261114d";
+import { ArcReactor, Sparkline } from "./reactor.js?v=20261114d";
+import { VoiceController } from "./voice.js?v=20261114d";
 
 /*  -  small DOM helpers  -  */
 const $ = (id) => document.getElementById(id);
@@ -1354,6 +1354,7 @@ async function loadScreen() {
 }
 
 function showScreenFrame() {
+  if (screenLive) return;
   const img = $("screen-frame");
   img.hidden = false;
   img.onerror = () => {
@@ -1361,6 +1362,41 @@ function showScreenFrame() {
     $("screen-note").textContent = "Frame unavailable (capture off or reader offline).";
   };
   img.src = `/api/screen/frame?ts=${Date.now()}`;
+}
+
+let screenLive = false;
+
+function stopLiveScreen() {
+  const live = $("screen-live");
+  screenLive = false;
+  if (live) {
+    live.hidden = true;
+    live.removeAttribute("src");
+  }
+  const btn = $("screen-live-btn");
+  if (btn) {
+    btn.textContent = "Live view";
+    btn.setAttribute("aria-pressed", "false");
+  }
+}
+
+function toggleLiveScreen() {
+  const live = $("screen-live");
+  const btn = $("screen-live-btn");
+  if (!live || !btn) return;
+  if (screenLive) {
+    stopLiveScreen();
+    showScreenFrame();
+    return;
+  }
+  screenLive = true;
+  live.hidden = false;
+  $("screen-frame").hidden = true;
+  live.src = `/api/screen/stream?fps=30&scale=1280&ts=${Date.now()}`;
+  btn.textContent = "Stop live";
+  btn.setAttribute("aria-pressed", "true");
+  $("screen-note").textContent =
+    "Live MJPEG at 30 fps, 1280 wide, cursor marker drawn at the real pointer position. OCR keeps its own interval.";
 }
 
 async function screenCapture(state) {
@@ -1428,6 +1464,7 @@ async function loadEvolve() {
 }
 
 function selectTab(name) {
+  if (currentTab === "screen" && name !== "screen") stopLiveScreen();
   currentTab = name;
   for (const btn of document.querySelectorAll(".tab")) {
     const on = btn.dataset.tab === name;
@@ -1491,6 +1528,7 @@ function wire() {
   $("screen-on").addEventListener("click", () => screenCapture("on"));
   $("screen-off").addEventListener("click", () => screenCapture("off"));
   $("screen-describe").addEventListener("click", screenDescribe);
+  $("screen-live-btn").addEventListener("click", toggleLiveScreen);
   $("evolve-refresh").addEventListener("click", loadEvolve);
   const fsBtn = $("fs-btn");
   if (fsBtn) {

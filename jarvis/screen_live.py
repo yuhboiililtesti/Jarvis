@@ -51,6 +51,51 @@ VLM_MODEL = os.environ.get("JARVIS_SCREEN_VLM_MODEL", "llava:7b")
 
 _DXCAM: Any = None
 _DXCAM_FAILED = False
+_DXCAM_LAST: Any = None
+_USER32_CURSOR = None
+
+
+def _cursor_position() -> tuple[int, int] | None:
+    """The real pointer position (DXGI/GDI captures omit the cursor)."""
+    global _USER32_CURSOR
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+        if _USER32_CURSOR is None:
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            user32.GetCursorPos.argtypes = [ctypes.POINTER(wt.POINT)]
+            user32.GetCursorPos.restype = wt.BOOL
+            _USER32_CURSOR = user32
+        point = wt.POINT()
+        if not _USER32_CURSOR.GetCursorPos(ctypes.byref(point)):
+            return None
+        return int(point.x), int(point.y)
+    except Exception:
+        return None
+
+
+def _mark_cursor(image: Any):
+    """Draw a visible marker at the true pointer position.
+
+    This is an explicit marker, not the OS cursor bitmap: screen grabs omit the
+    pointer, and a marker is honest about where it is.
+    """
+    position = _cursor_position()
+    if position is None:
+        return image
+    from PIL import ImageDraw
+    draw = ImageDraw.Draw(image)
+    x, y = position
+    radius = 10
+    draw.ellipse([x - radius, y - radius, x + radius, y + radius],
+                 outline=(255, 70, 70), width=2)
+    draw.line([x - radius - 6, y, x - radius, y], fill=(255, 255, 255), width=1)
+    draw.line([x + radius, y, x + radius + 6, y], fill=(255, 255, 255), width=1)
+    draw.line([x, y - radius - 6, x, y - radius], fill=(255, 255, 255), width=1)
+    draw.line([x, y + radius, x, y + radius + 6], fill=(255, 255, 255), width=1)
+    return image
 
 
 def _grab_screen(all_screens: bool):
@@ -61,7 +106,7 @@ def _grab_screen(all_screens: bool):
     return black — and falls back to Pillow. ``JARVIS_SCREEN_CAPTURE=pil``
     forces the fallback.
     """
-    global _DXCAM, _DXCAM_FAILED
+    global _DXCAM, _DXCAM_FAILED, _DXCAM_LAST
     if (sys.platform == "win32" and not all_screens and not _DXCAM_FAILED
             and os.environ.get("JARVIS_SCREEN_CAPTURE", "").lower() != "pil"):
         try:
@@ -71,8 +116,12 @@ def _grab_screen(all_screens: bool):
             if _DXCAM is not None:
                 frame = _DXCAM.grab()
                 if frame is not None:
+                    _DXCAM_LAST = frame
+                if _DXCAM_LAST is not None:
+                    # dxcam returns None when nothing changed; repeating the
+                    # last frame is correct (and avoids a 150 ms GDI capture).
                     from PIL import Image
-                    return Image.fromarray(frame)
+                    return Image.fromarray(_DXCAM_LAST)
         except Exception:
             _DXCAM_FAILED = True
             log.warning("DXGI capture unavailable; using Pillow instead")
@@ -235,11 +284,22 @@ class ScreenSampler:
                     "uptime_s": round(time.time() - self.started_at, 1)}
 
 
-def frame_jpeg(all_screens: bool = False, quality: int = 70) -> bytes:
-    image = _grab_screen(all_screens)
+def _encode_jpeg(image: Any, quality: int) -> bytes:
     buffer = io.BytesIO()
     image.convert("RGB").save(buffer, "JPEG", quality=quality)
     return buffer.getvalue()
+
+
+def frame_jpeg(all_screens: bool = False, quality: int = 70,
+               max_width: int | None = None,
+               cursor: bool = True) -> bytes:
+    image = _grab_screen(all_screens)
+    if max_width and image.width > max_width:
+        ratio = max_width / image.width
+        image = image.resize((max_width, max(1, int(image.height * ratio))))
+    if cursor:
+        image = _mark_cursor(image.convert("RGB"))
+    return _encode_jpeg(image, quality)
 
 
 def describe(jpeg: bytes, question: str = "", *,
@@ -300,7 +360,7 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             self._json(401, {"ok": False, "error": "unauthorized"})
             return
-        if path in ("/latest", "/frame", "/describe") and not sampler.enabled:
+        if path in ("/latest", "/frame", "/describe", "/stream.mjpg") and not sampler.enabled:
             self._json(409, {"ok": False, "capturing": False,
                              "error": "capture is off"})
             return
@@ -320,8 +380,19 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(200, latest)
             return
         if path == "/frame":
+            query = parse_qs(parsed.query)
             try:
-                raw = frame_jpeg(sampler.all_screens)
+                quality = max(30, min(int((query.get("quality") or ["70"])[0]), 95))
+            except ValueError:
+                quality = 70
+            try:
+                scale = int((query.get("scale") or ["0"])[0])
+            except ValueError:
+                scale = 0
+            cursor = (query.get("cursor") or ["1"])[0].lower() not in ("0", "false", "no")
+            try:
+                raw = frame_jpeg(sampler.all_screens, quality=quality,
+                                 max_width=scale or None, cursor=cursor)
             except Exception as exc:
                 self._json(503, {"ok": False,
                                  "error": f"capture failed: {type(exc).__name__}: {exc}"})
@@ -332,6 +403,47 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(raw)
+            return
+        if path == "/stream.mjpg":
+            query = parse_qs(parsed.query)
+            try:
+                fps = float((query.get("fps") or ["15"])[0])
+            except ValueError:
+                fps = 15.0
+            fps = max(1.0, min(fps, 30.0))
+            try:
+                scale = int((query.get("scale") or ["1280"])[0])
+            except ValueError:
+                scale = 1280
+            try:
+                quality = int((query.get("quality") or ["55"])[0])
+            except ValueError:
+                quality = 55
+            quality = max(30, min(quality, 90))
+            self.send_response(200)
+            self.send_header("Content-Type",
+                             "multipart/x-mixed-replace; boundary=frame")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            next_frame = time.perf_counter()
+            try:
+                while True:
+                    raw = frame_jpeg(sampler.all_screens, quality=quality,
+                                     max_width=scale or None, cursor=True)
+                    self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n"
+                                     b"Content-Length: " +
+                                     str(len(raw)).encode("ascii") + b"\r\n\r\n")
+                    self.wfile.write(raw)
+                    self.wfile.write(b"\r\n")
+                    self.wfile.flush()
+                    next_frame += 1.0 / fps
+                    delay = next_frame - time.perf_counter()
+                    if delay > 0:
+                        time.sleep(delay)
+                    else:
+                        next_frame = time.perf_counter()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
             return
         if path == "/describe":
             query = parse_qs(parsed.query)
@@ -359,8 +471,9 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/":
             self._json(200, {
                 "service": "jarvis screen live",
-                "endpoints": ["/health", "/latest", "/frame", "/describe",
-                              "POST /capture/on", "POST /capture/off"],
+                "endpoints": ["/health", "/latest", "/frame", "/stream.mjpg",
+                              "/describe", "POST /capture/on",
+                              "POST /capture/off"],
                 "recording": False,
             })
             return
