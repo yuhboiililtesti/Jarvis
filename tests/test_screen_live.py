@@ -152,3 +152,9 @@ def test_describe_reports_a_missing_vision_model(live_server, monkeypatch):
     body = json.loads(exc.value.read().decode("utf-8"))
     assert "vision model unavailable" in body["error"]
     assert "llava:7b" in body["error"]
+
+
+def test_vision_live_is_auto_allowed_by_default():
+    """Read-only, local, same category as vision.screen: no approval prompt."""
+    from jarvis.config import PolicyConfig
+    assert "vision.live" in PolicyConfig().auto_allow
