@@ -57,6 +57,30 @@ returns the last snapshot). The HUD's Diagnostics panel includes it.
 - Starting the model server is deliberately left to the owner: a GUI app started
   by a background service is surprising and hard to supervise.
 
+## APOS tunnel supervision (2026-11-12)
+
+The production control plane runs both node tunnels from
+`jarvis-node-tunnels.service` (`/home/topaz/bin/jarvis-node-tunnels.sh`):
+
+| Local (APOS) | Via | Destination |
+|---|---|---|
+| `127.0.0.1:2228` | `Topaz@10.0.0.200:2223` (PC) | PC `127.0.0.1:2228` |
+| `127.0.0.1:2230` | `topaz@10.0.0.234:2225` (laptop) | laptop `127.0.0.1:2226` |
+
+**Fixed defect:** the script used `wait -n`, so when the PC leg failed (during
+the PC-001 crash recovery the journal showed repeated `No route to host`),
+the whole service exited, systemd restarted it, and the healthy laptop tunnel
+was torn down with it. Each leg is now supervised independently and retried
+every 5 s; one node's failure can no longer break the other. The previous
+script is kept as `jarvis-node-tunnels.sh.bak-20261112`.
+
+Verification: both local ports listen after restart; the PC leg takes up to
+~30 s to establish while its sshd settles after boot. The PC leg terminated a
+general SSH probe (`Connection closed`) because it fronts the node endpoint,
+not the general sshd; that is expected. A laptop tunnel that hangs at banner
+exchange while `10.0.0.234:2225` answers should be retested when the laptop is
+idle — a CPU-saturated laptop can starve the node endpoint.
+
 ## Related
 
 [RUNTIME.md](RUNTIME.md) · [GOALS.md](GOALS.md) · [SANDBOX.md](SANDBOX.md) ·
