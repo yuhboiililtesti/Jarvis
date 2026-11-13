@@ -511,9 +511,12 @@ class _QuietServer(ThreadingHTTPServer):
 
 def serve(port: int = DEFAULT_PORT, *, interval: float = DEFAULT_INTERVAL,
           all_screens: bool = False, token: str | None = None,
-          block: bool = True) -> ThreadingHTTPServer:
+          block: bool = True, start_paused: bool = False) -> ThreadingHTTPServer:
     sampler = ScreenSampler(interval=interval, all_screens=all_screens)
-    sampler.start()
+    if start_paused:
+        sampler.pause()
+    else:
+        sampler.start()
     server = _QuietServer(("127.0.0.1", int(port)), _Handler)
     server.sampler = sampler  # type: ignore[attr-defined]
     server.token = token  # type: ignore[attr-defined]
@@ -542,6 +545,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--all-screens", action="store_true")
     parser.add_argument("--once", action="store_true",
                         help="take one sample, print it as JSON, exit")
+    parser.add_argument("--start-paused", action="store_true",
+                        help="serve but do not sample until POST /capture/on")
     args = parser.parse_args(argv)
     token = os.environ.get("JARVIS_SCREEN_TOKEN") or None
     if args.once:
@@ -560,7 +565,7 @@ def main(argv: list[str] | None = None) -> int:
                           "latency_ms": record["latency_ms"]}))
         return 0
     serve(args.port, interval=args.interval, all_screens=args.all_screens,
-          token=token)
+          token=token, start_paused=args.start_paused)
     return 0
 
 

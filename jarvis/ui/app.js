@@ -5,9 +5,9 @@
    Loaded as an ES module:  <script type="module" src="app.js"></script>
    ========================================================================= */
 
-import { Api, BusSocket, streamChat, wsUrl } from "./transport.js?v=20261114d";
-import { ArcReactor, Sparkline } from "./reactor.js?v=20261114d";
-import { VoiceController } from "./voice.js?v=20261114d";
+import { Api, BusSocket, streamChat, wsUrl } from "./transport.js?v=20261114e";
+import { ArcReactor, Sparkline } from "./reactor.js?v=20261114e";
+import { VoiceController } from "./voice.js?v=20261114e";
 
 /*  -  small DOM helpers  -  */
 const $ = (id) => document.getElementById(id);
@@ -1721,12 +1721,13 @@ function isModalOpen() { return !$("palette-modal").hidden || !$("approval-modal
 /*  -  websocket  -  */
 function startSocket() {
   socket = new BusSocket(wsUrl());
+  state.lastFrameAt = Date.now();
   socket.addEventListener("state", (ev) => {
     const { status, attempt, delayMs } = ev.detail;
     setConnected(status === "open", { status, attempt, delayMs });
     if (status === "open") syncApprovals().catch(() => {});
   });
-  socket.addEventListener("frame", (ev) => routeFrame(ev.detail));
+  socket.addEventListener("frame", (ev) => { state.lastFrameAt = Date.now(); routeFrame(ev.detail); });
   socket.connect();
 }
 
@@ -1777,6 +1778,13 @@ function init() {
     if (document.visibilityState !== "hidden") { refreshHealth(); refreshState(); }
   }, 12000);
   setInterval(pollMetrics, 6000);
+  // Watchdog: the socket can stay "open" while the tunnel silently stalls.
+  setInterval(() => {
+    if (state.connected && Date.now() - (state.lastFrameAt || 0) > 30000) {
+      state.lastFrameAt = Date.now();
+      socket.connect();
+    }
+  }, 10000);
   setInterval(() => { if (document.visibilityState !== "hidden") refreshSystems(); }, 12000);
   setInterval(() => {
     // Node telemetry goes over SSH, so refresh it only while the tab is open.

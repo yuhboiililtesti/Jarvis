@@ -18,7 +18,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$python = Join-Path $root ".venv\Scripts\python.exe"
+$python = Join-Path $root ".venv\Scripts\pythonw.exe"
+if (-not (Test-Path $python)) { $python = Join-Path $root ".venv\Scripts\python.exe" }
 $base = "http://127.0.0.1:8799"
 $headers = @{}
 if ($env:JARVIS_SCREEN_TOKEN) {
@@ -74,7 +75,7 @@ switch ($Action) {
         $h = Get-Health
         if (-not $h) {
             Start-Process -WindowStyle Hidden -FilePath $python `
-                -ArgumentList "-m", "jarvis.screen_live", "--interval", "5" `
+                -ArgumentList "-m", "jarvis.screen_live", "--interval", "5", "--start-paused" `
                 -WorkingDirectory $root
             $h = Wait-Health
             if (-not $h) {

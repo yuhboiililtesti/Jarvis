@@ -211,7 +211,7 @@ export class BusSocket extends EventTarget {
 
   _scheduleReconnect(code, reason) {
     this.attempt += 1;
-    const base = Math.min(30000, 500 * Math.pow(2, this.attempt - 1));
+    const base = Math.min(8000, 500 * Math.pow(2, this.attempt - 1));
     const delay = Math.round(base * (0.7 + Math.random() * 0.6));
     this._setStatus("reconnecting", { code, reason, delayMs: delay, nextInMs: delay });
     this.timer = setTimeout(() => this.connect(), delay);
