@@ -57,6 +57,9 @@ curl.exe -s -o "$env:TEMP\frame.jpg" http://127.0.0.1:8799/frame
 curl.exe -s http://127.0.0.1:8799/describe
 ```
 
+For a visual check, fetch `/frame` to a temporary file, look at it, and delete
+it. The service itself never writes a frame or keeps a history.
+
 From APOS (JARVIS Core host) the same URLs work through the tunnel:
 `http://127.0.0.1:8799/...`.
 
